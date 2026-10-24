@@ -24,6 +24,7 @@ import (
 
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
+	"github.com/nikolaiianchuk/hima/internal/ics"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web"
 )
@@ -71,7 +72,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	// Not yet read by the web layer; refreshing now surfaces bad feed URLs at startup.
-	cals := calsource.New(cfg.Sources(), avail.Location, nil)
+	cals := calsource.New(cfg.Sources(), ics.Options{Location: avail.Location, OwnerEmails: cfg.Owner.Emails}, nil)
 	go cals.Run(ctx, 5*time.Minute, func(err error) {
 		log.Warn("calendar source refresh failed", "err", err)
 	})

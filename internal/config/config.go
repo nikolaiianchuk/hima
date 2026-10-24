@@ -34,6 +34,9 @@ type Config struct {
 
 type Owner struct {
 	Name string `yaml:"name"`
+	// Emails identify the Owner among meeting attendees so invitations they
+	// declined are not Busy blocks. Never shown or sent anywhere.
+	Emails []string `yaml:"emails"`
 }
 
 type Auth struct {
@@ -81,6 +84,9 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.BaseURL, "HIMA_BASE_URL")
 	set(&c.Database, "HIMA_DATABASE")
 	set(&c.Owner.Name, "HIMA_OWNER_NAME")
+	if v := getenv("HIMA_OWNER_EMAILS"); v != "" {
+		c.Owner.Emails = strings.Split(v, ",")
+	}
 	set(&c.Auth.Mode, "HIMA_AUTH_MODE")
 	set(&c.Auth.ProxyHeader, "HIMA_AUTH_PROXY_HEADER")
 	set(&c.Auth.PasswordHash, "HIMA_AUTH_PASSWORD_HASH")

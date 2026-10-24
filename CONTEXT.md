@@ -87,7 +87,7 @@ _Avoid_: Free time, opening
 - Only the **Guest** reschedules a **Booking** (via the **Manage link**); the **Owner** may cancel it or edit its location and notes, but not move it
 - There is exactly one **Owner feed**; Guests have no feed and get a one-off calendar file plus their **Manage link**
 - **Busy blocks** are the union of every **Calendar source**; if any source cannot be trusted as current, no **Slots** are offered
-- Events marked free in a **Calendar source** never become **Busy blocks**; all-day events do only if that source says so
+- Events marked free, cancelled, or declined by the **Owner** in a **Calendar source** never become **Busy blocks**; all-day events do only if that source says so
 - The **Owner** is notified of new **Bookings**, reschedules, Guest **Cancellations** and failing **Calendar sources**; a failed notification never undoes a **Booking**
 - There is one **Availability**; an **Invite** may narrow it but never widen it
 - **Availability** is wall-clock time in the **Owner**'s time zone; a **Booking** is a fixed instant that never shifts when that zone changes

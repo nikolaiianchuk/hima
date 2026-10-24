@@ -12,6 +12,9 @@ database: hima.db
 
 owner:
   name: Nikolai
+  # Your addresses as they appear in meeting invitations. Used only to spot
+  # invitations you declined, so they don't block Slots. Never shown to Guests.
+  # emails: [you@example.com, you@work.example.com]
 
 auth:
   # Required, no default — hima refuses to start without it (docs/adr/0002).

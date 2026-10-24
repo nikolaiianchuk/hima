@@ -38,7 +38,7 @@ type entry struct {
 
 type Cache struct {
 	sources []Source
-	loc     *time.Location
+	opts    ics.Options
 	client  *http.Client
 	// MaxAge is how long the last good copy is trusted when fetches fail.
 	MaxAge time.Duration
@@ -48,13 +48,15 @@ type Cache struct {
 	entries []entry // parallel to sources
 }
 
-func New(sources []Source, loc *time.Location, client *http.Client) *Cache {
+// New creates a Cache. opts describes the Owner (time zone, email addresses)
+// to the feed parser.
+func New(sources []Source, opts ics.Options, client *http.Client) *Cache {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	return &Cache{
 		sources: sources,
-		loc:     loc,
+		opts:    opts,
 		client:  client,
 		MaxAge:  time.Hour,
 		now:     time.Now,
@@ -156,7 +158,7 @@ func (c *Cache) fetch(ctx context.Context, url string) (*ics.Calendar, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %s", resp.Status)
 	}
-	return ics.Parse(io.LimitReader(resp.Body, maxFeedSize), c.loc)
+	return ics.Parse(io.LimitReader(resp.Body, maxFeedSize), c.opts)
 }
 
 // redact hides the secret part of private feed URLs in logs and

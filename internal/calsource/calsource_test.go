@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/nikolaiianchuk/hima/internal/ics"
 )
 
 const feed = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n" +
@@ -42,7 +44,7 @@ func newServer(t *testing.T) *flakyServer {
 
 func TestBusyBeforeFirstFetchIsStale(t *testing.T) {
 	srv := newServer(t)
-	c := New([]Source{{URL: srv.URL}}, time.UTC, srv.Client())
+	c := New([]Source{{URL: srv.URL}}, ics.Options{Location: time.UTC}, srv.Client())
 	if _, err := c.Busy(from, to); !errors.Is(err, ErrStale) {
 		t.Fatalf("err = %v, want ErrStale", err)
 	}
@@ -50,7 +52,7 @@ func TestBusyBeforeFirstFetchIsStale(t *testing.T) {
 
 func TestUnionAndAllDayPerSource(t *testing.T) {
 	srv := newServer(t)
-	c := New([]Source{{URL: srv.URL}, {URL: srv.URL + "/2", AllDayBlocks: true}}, time.UTC, srv.Client())
+	c := New([]Source{{URL: srv.URL}, {URL: srv.URL + "/2", AllDayBlocks: true}}, ics.Options{Location: time.UTC}, srv.Client())
 	if err := c.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +69,7 @@ func TestUnionAndAllDayPerSource(t *testing.T) {
 func TestLastGoodCopyThenStale(t *testing.T) {
 	srv := newServer(t)
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	c := New([]Source{{URL: srv.URL}}, time.UTC, srv.Client())
+	c := New([]Source{{URL: srv.URL}}, ics.Options{Location: time.UTC}, srv.Client())
 	c.now = func() time.Time { return now }
 	if err := c.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
@@ -91,7 +93,7 @@ func TestLastGoodCopyThenStale(t *testing.T) {
 func TestRefreshIfOlder(t *testing.T) {
 	srv := newServer(t)
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	c := New([]Source{{URL: srv.URL}}, time.UTC, srv.Client())
+	c := New([]Source{{URL: srv.URL}}, ics.Options{Location: time.UTC}, srv.Client())
 	c.now = func() time.Time { return now }
 	ctx := context.Background()
 

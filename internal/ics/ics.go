@@ -1,8 +1,9 @@
 // Package ics turns an iCalendar feed (a Calendar source) into Busy blocks.
 //
 // It expands recurring events (RRULE, RDATE, EXDATE) and applies moved or
-// cancelled instances (RECURRENCE-ID). Events marked free (TRANSP:TRANSPARENT)
-// or cancelled never block; all-day events block only when asked to.
+// cancelled instances (RECURRENCE-ID). Events marked free (TRANSP:TRANSPARENT),
+// cancelled, or declined by the Owner never block; all-day events block only
+// when asked to.
 package ics
 
 import (
@@ -36,9 +37,24 @@ type series struct {
 	exdates map[int64]bool // excluded occurrence starts, unix seconds
 }
 
-// Parse reads a feed. loc is the Owner's time zone, used for floating times
-// and all-day dates.
-func Parse(r io.Reader, loc *time.Location) (*Calendar, error) {
+// Options describe the Owner to a parser.
+type Options struct {
+	// Location is the Owner's time zone, used for floating times and all-day
+	// dates.
+	Location *time.Location
+	// OwnerEmails identify the Owner among an event's attendees, so events
+	// they declined can be ignored. Matching is case-insensitive.
+	OwnerEmails []string
+}
+
+// Parse reads a feed.
+func Parse(r io.Reader, opts Options) (*Calendar, error) {
+	loc := opts.Location
+	owner := make(map[string]bool, len(opts.OwnerEmails))
+	for _, e := range opts.OwnerEmails {
+		owner[strings.ToLower(strings.TrimSpace(e))] = true
+	}
+
 	ic, err := ical.NewDecoder(r).Decode()
 	if err != nil {
 		return nil, fmt.Errorf("ics: %w", err)
@@ -65,7 +81,7 @@ func Parse(r io.Reader, loc *time.Location) (*Calendar, error) {
 			overrides = append(overrides, override{uid: uid, at: at})
 			isOverride = true
 		}
-		if !blocks(ev) {
+		if !blocks(ev, owner) {
 			continue
 		}
 		s, ok, err := toSeries(ev, loc)
@@ -144,14 +160,44 @@ func (s series) startsBetween(from, to time.Time) []time.Time {
 	return kept
 }
 
-func blocks(ev ical.Event) bool {
+func blocks(ev ical.Event, owner map[string]bool) bool {
 	if transp, _ := ev.Props.Text(ical.PropTransparency); strings.EqualFold(transp, "TRANSPARENT") {
 		return false
 	}
 	if status, _ := ev.Props.Text(ical.PropStatus); strings.EqualFold(status, "CANCELLED") {
 		return false
 	}
-	return true
+	return !ownerDeclined(ev, owner)
+}
+
+// ownerDeclined reports whether the Owner appears among the attendees and
+// declined under every address they appear with. Accepted, tentative and
+// unanswered invitations all block.
+func ownerDeclined(ev ical.Event, owner map[string]bool) bool {
+	if len(owner) == 0 {
+		return false
+	}
+	matched := false
+	for _, a := range ev.Props[ical.PropAttendee] {
+		if !owner[attendeeEmail(a)] {
+			continue
+		}
+		matched = true
+		if !strings.EqualFold(a.Params.Get(ical.ParamParticipationStatus), "DECLINED") {
+			return false
+		}
+	}
+	return matched
+}
+
+// attendeeEmail returns the lower-cased address of an ATTENDEE, from its
+// mailto: value or, failing that, its EMAIL parameter.
+func attendeeEmail(a ical.Prop) string {
+	v := a.Value
+	if len(v) > len("mailto:") && strings.EqualFold(v[:len("mailto:")], "mailto:") {
+		return strings.ToLower(v[len("mailto:"):])
+	}
+	return strings.ToLower(a.Params.Get("EMAIL"))
 }
 
 // toSeries converts an event. ok is false for events that occupy no time.

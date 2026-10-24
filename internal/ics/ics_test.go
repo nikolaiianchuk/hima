@@ -26,9 +26,11 @@ func at(s string) time.Time {
 	return t
 }
 
+const me = "Me@Example.com"
+
 func busy(t *testing.T, ics string, from, to string, allDay bool) []string {
 	t.Helper()
-	cal, err := Parse(strings.NewReader(ics), lisbon)
+	cal, err := Parse(strings.NewReader(ics), Options{Location: lisbon, OwnerEmails: []string{me, "alias@example.com"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,11 +136,61 @@ func TestBrokenEventIsSkippedNotFatal(t *testing.T) {
 		event("UID:bad", "DTSTART:not-a-date", "DTEND:20261026T110000Z"),
 		event("UID:good", "DTSTART:20261026T120000Z", "DTEND:20261026T130000Z"),
 	)
-	cal, err := Parse(strings.NewReader(ics), lisbon)
+	cal, err := Parse(strings.NewReader(ics), Options{Location: lisbon})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cal.Skipped != 1 || len(cal.Busy(at("2026-10-26 00:00"), at("2026-10-27 00:00"), false)) != 1 {
 		t.Errorf("Skipped = %d", cal.Skipped)
+	}
+}
+
+func TestOwnerReplies(t *testing.T) {
+	ics := feed(
+		event("UID:declined", "DTSTART:20261026T090000Z", "DTEND:20261026T100000Z",
+			"ATTENDEE;PARTSTAT=ACCEPTED:mailto:boss@example.com",
+			"ATTENDEE;PARTSTAT=DECLINED:MAILTO:me@example.com"),
+		event("UID:accepted", "DTSTART:20261026T110000Z", "DTEND:20261026T120000Z",
+			"ATTENDEE;PARTSTAT=ACCEPTED:mailto:me@example.com"),
+		event("UID:unanswered", "DTSTART:20261026T130000Z", "DTEND:20261026T140000Z",
+			"ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:me@example.com"),
+		event("UID:tentative", "DTSTART:20261026T150000Z", "DTEND:20261026T160000Z",
+			"ATTENDEE;PARTSTAT=TENTATIVE:mailto:me@example.com"),
+		// Someone else declining says nothing about the Owner.
+		event("UID:other-declined", "DTSTART:20261026T170000Z", "DTEND:20261026T180000Z",
+			"ATTENDEE;PARTSTAT=DECLINED:mailto:bob@example.com"),
+		// Declined with one address but accepted with another still blocks.
+		event("UID:mixed", "DTSTART:20261027T090000Z", "DTEND:20261027T100000Z",
+			"ATTENDEE;PARTSTAT=DECLINED:mailto:me@example.com",
+			"ATTENDEE;PARTSTAT=ACCEPTED:mailto:alias@example.com"),
+		// Address given only in the EMAIL parameter.
+		event("UID:email-param", "DTSTART:20261027T110000Z", "DTEND:20261027T120000Z",
+			"ATTENDEE;PARTSTAT=DECLINED;EMAIL=alias@example.com:urn:uuid:1234"),
+	)
+	assertBusy(t, busy(t, ics, "2026-10-26 00:00", "2026-10-28 00:00", false),
+		"10-26 11:00–10-26 12:00", "10-26 13:00–10-26 14:00", "10-26 15:00–10-26 16:00",
+		"10-26 17:00–10-26 18:00", "10-27 09:00–10-27 10:00")
+}
+
+func TestDeclinedSingleOccurrence(t *testing.T) {
+	ics := feed(
+		event("UID:weekly", "DTSTART:20261026T140000Z", "DTEND:20261026T150000Z", "RRULE:FREQ=DAILY;COUNT=3",
+			"ATTENDEE;PARTSTAT=ACCEPTED:mailto:me@example.com"),
+		event("UID:weekly", "RECURRENCE-ID:20261027T140000Z", "DTSTART:20261027T140000Z", "DTEND:20261027T150000Z",
+			"ATTENDEE;PARTSTAT=DECLINED:mailto:me@example.com"),
+	)
+	assertBusy(t, busy(t, ics, "2026-10-26 00:00", "2026-10-30 00:00", false),
+		"10-26 14:00–10-26 15:00", "10-28 14:00–10-28 15:00")
+}
+
+func TestWithoutOwnerEmailsDeclinedStillBlocks(t *testing.T) {
+	ics := feed(event("UID:d", "DTSTART:20261026T090000Z", "DTEND:20261026T100000Z",
+		"ATTENDEE;PARTSTAT=DECLINED:mailto:me@example.com"))
+	cal, err := Parse(strings.NewReader(ics), Options{Location: lisbon})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cal.Busy(at("2026-10-26 00:00"), at("2026-10-27 00:00"), false); len(got) != 1 {
+		t.Errorf("busy = %v, want the event to block", got)
 	}
 }
