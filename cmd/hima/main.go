@@ -2,6 +2,7 @@
 //
 //	hima [-config hima.yaml]   start the server
 //	hima hash-password         print a bcrypt hash for auth.password_hash
+//	hima healthcheck           exit 0 if the local server answers /healthz
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,12 +35,21 @@ import (
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "hash-password" {
-		if err := hashPassword(); err != nil {
-			fmt.Fprintln(os.Stderr, "hima:", err)
-			os.Exit(1)
+	if len(os.Args) > 1 {
+		var cmd func() error
+		switch os.Args[1] {
+		case "hash-password":
+			cmd = hashPassword
+		case "healthcheck":
+			cmd = healthcheck
 		}
-		return
+		if cmd != nil {
+			if err := cmd(); err != nil {
+				fmt.Fprintln(os.Stderr, "hima:", err)
+				os.Exit(1)
+			}
+			return
+		}
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -203,4 +214,34 @@ func purgeDaily(ctx context.Context, log *slog.Logger, st *store.Store, retentio
 		case <-t.C:
 		}
 	}
+}
+
+// healthcheck asks the server configured by HIMA_* / HIMA_CONFIG for
+// /healthz. Used by the container HEALTHCHECK, where there is no curl.
+func healthcheck() error {
+	path := os.Getenv("HIMA_CONFIG")
+	if path == "" {
+		path = "hima.yaml"
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		return err
+	}
+	host, port, err := net.SplitHostPort(cfg.Listen)
+	if err != nil {
+		return err
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthz: %s", resp.Status)
+	}
+	return nil
 }
