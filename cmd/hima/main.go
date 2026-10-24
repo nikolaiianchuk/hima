@@ -17,10 +17,12 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata" // the distroless image has no zoneinfo
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
+	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web"
@@ -63,6 +65,16 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("open database: %w", err)
 	}
 	defer st.Close()
+
+	avail, err := cfg.Availability()
+	if err != nil {
+		return err
+	}
+	// Not yet read by the web layer; refreshing now surfaces bad feed URLs at startup.
+	cals := calsource.New(cfg.Sources(), avail.Location, nil)
+	go cals.Run(ctx, 5*time.Minute, func(err error) {
+		log.Warn("calendar source refresh failed", "err", err)
+	})
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,

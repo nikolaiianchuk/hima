@@ -24,3 +24,23 @@ auth:
 
   # password mode: generate with `hima hash-password`.
   # password_hash: $2a$10$...
+
+# When you can be booked. Hours are wall-clock time in `timezone`.
+availability:
+  timezone: Europe/Lisbon
+  weekly:               # mon..sun; omitted days are unavailable
+    mon: ["10:00-18:00"]
+    tue: ["10:00-18:00"]
+    wed: ["10:00-18:00"]
+    thu: ["10:00-18:00"]
+    fri: ["10:00-13:00", "15:00-18:00"]
+  buffer: 15m           # kept free around every busy block
+  min_notice: 12h       # earliest a Slot may start from now
+  horizon_days: 30      # how far ahead Guests can book
+  step: 30m             # spacing between Slot start times
+
+# Calendar sources: private ICS URLs. Everything in them counts as busy,
+# except events marked "free". (For webcal:// links, use https:// instead.)
+calendars:
+  - url: https://calendar.google.com/calendar/ical/.../basic.ics
+    all_day_blocks: false   # true: all-day events (holidays, trips) block the day

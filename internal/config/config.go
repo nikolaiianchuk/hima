@@ -26,6 +26,10 @@ type Config struct {
 	Database string `yaml:"database"`
 	Owner    Owner  `yaml:"owner"`
 	Auth     Auth   `yaml:"auth"`
+
+	AvailabilityConfig AvailabilityConfig `yaml:"availability"`
+	// Calendars are the Calendar sources whose events are Busy blocks.
+	Calendars []CalendarConfig `yaml:"calendars"`
 }
 
 type Owner struct {
@@ -97,6 +101,7 @@ func (c *Config) applyDefaults() {
 		c.Owner.Name = "the owner"
 	}
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
+	c.AvailabilityConfig.applyDefaults()
 }
 
 func (c *Config) Validate() error {
@@ -110,6 +115,14 @@ func (c *Config) Validate() error {
 		}
 	default:
 		return fmt.Errorf(`auth.mode %q is invalid: use "proxy" or "password"`, c.Auth.Mode)
+	}
+	if _, err := c.Availability(); err != nil {
+		return err
+	}
+	for i, cal := range c.Calendars {
+		if !strings.HasPrefix(cal.URL, "https://") && !strings.HasPrefix(cal.URL, "http://") {
+			return fmt.Errorf("calendars[%d].url must be an http(s) URL (webcal:// links: replace webcal with https)", i)
+		}
 	}
 	return nil
 }
