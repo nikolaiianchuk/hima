@@ -64,6 +64,8 @@ func newTestServer(t *testing.T, auth config.Auth) *testServer {
 		Calendars:    cals,
 		Now:          func() time.Time { return now },
 		Notifier:     &notify.Dispatcher{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
+		OwnerName:    "Nikolai",
+		UIDDomain:    "hima.example.com",
 	}
 	cfg := &config.Config{Owner: config.Owner{Name: "Nikolai"}, Auth: auth}
 	cfg.InviteDefaults = config.InviteDefaults{ExpiresInDays: 7, MaxUses: 1, Durations: []time.Duration{30 * time.Minute}}
@@ -164,7 +166,7 @@ func TestGuestFlow(t *testing.T) {
 	if !strings.HasPrefix(h.Get("Content-Type"), "text/calendar") {
 		t.Fatalf("ics content type %q", h.Get("Content-Type"))
 	}
-	mustContain(t, body, "BEGIN:VEVENT", "SUMMARY:Alex ↔ Nikolai: trip", "LOCATION:Café Nicola", "DTSTART:20261026T100000Z", "SEQUENCE:0")
+	mustContain(t, body, "BEGIN:VEVENT", "UID:booking-1@hima.example.com", "SUMMARY:Alex ↔ Nikolai: trip", "LOCATION:Café Nicola", "DTSTART:20261026T100000Z", "SEQUENCE:0")
 
 	// One use: the Invite is dead now.
 	status, body, _ = ts.get(t, invite)

@@ -2,7 +2,6 @@ package web
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -255,36 +254,13 @@ func (s *Server) handleBookingICS(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	ev := s.bookingEvent(r, m.Booking)
+	ev := s.svc.CalendarEvent(m.Booking)
 	ev.URL = s.baseURL(r) + "/b/" + tok
 	ev.Notes = joinNonEmpty(m.Note, "Reschedule or cancel: "+ev.URL)
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="hima-booking.ics"`)
 	if err := ics.Write(w, "", ev); err != nil {
 		s.log.Error("write ics", "err", err)
-	}
-}
-
-// bookingEvent is a Booking as a calendar event. The UID is stable so
-// calendars update rather than duplicate it after a reschedule.
-func (s *Server) bookingEvent(r *http.Request, b store.Booking) ics.Event {
-	host := s.baseURL(r)
-	if u, err := url.Parse(host); err == nil && u.Host != "" {
-		host = u.Host
-	}
-	summary := b.GuestName + " ↔ " + s.cfg.Owner.Name
-	if b.Note != "" {
-		summary += ": " + truncate(b.Note, 60)
-	}
-	return ics.Event{
-		UID:       fmt.Sprintf("booking-%d@%s", b.ID, host),
-		Sequence:  b.Sequence,
-		Start:     b.Start,
-		End:       b.End,
-		Summary:   summary,
-		Location:  b.Location,
-		Cancelled: b.Cancelled(),
-		Stamp:     s.svc.Now(),
 	}
 }
 
@@ -380,12 +356,4 @@ func joinNonEmpty(parts ...string) string {
 		out += p
 	}
 	return out
-}
-
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
 }

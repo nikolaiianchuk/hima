@@ -55,17 +55,30 @@ type Service struct {
 	Now          func() time.Time
 	// Notifier, if set, is told about Bookings, reschedules and Cancellations.
 	Notifier notify.Notifier
+	// OwnerName appears in calendar event titles.
+	OwnerName string
+	// UIDDomain makes calendar event UIDs globally unique, e.g. the host of
+	// base_url.
+	UIDDomain string
 }
 
 func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message string, b store.Booking) {
 	if s.Notifier == nil {
 		return
 	}
+	var attachment *notify.Attachment
+	if kind == notify.Booked {
+		// Offered to channels that support it; ntfy uses it when attach_ics is on.
+		if data, err := s.ownerICS(b); err == nil {
+			attachment = &notify.Attachment{Filename: "booking.ics", Data: data}
+		}
+	}
 	s.Notifier.Notify(ctx, notify.Event{
-		Kind:    kind,
-		At:      s.Now(),
-		Title:   title,
-		Message: message,
+		Attachment: attachment,
+		Kind:       kind,
+		At:         s.Now(),
+		Title:      title,
+		Message:    message,
 		Booking: &notify.BookingInfo{
 			GuestName: b.GuestName, Note: b.Note, Location: b.Location,
 			InviteLabel: b.InviteLabel, Start: b.Start, End: b.End,

@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -39,6 +39,14 @@ type Event struct {
 	// Silent events are logged in the activity log but not pushed, e.g. the
 	// Owner's own actions.
 	Silent bool
+	// Attachment, if set, may be attached by channels that support files.
+	Attachment *Attachment
+}
+
+// Attachment is a file offered alongside an Event, e.g. a Booking's .ics.
+type Attachment struct {
+	Filename string
+	Data     []byte
 }
 
 type BookingInfo struct {
@@ -60,6 +68,10 @@ type NtfyConfig struct {
 	URL string
 	// Token is an optional access token for protected topics.
 	Token string
+	// AttachICS sends a Booking's .ics as a file with new-Booking
+	// notifications. Needs a server with attachments enabled; otherwise the
+	// plain notification is sent instead.
+	AttachICS bool
 }
 
 type Dispatcher struct {
@@ -136,10 +148,34 @@ var ntfyTags = map[Kind]string{
 	CalendarRecovered: "white_check_mark",
 }
 
+// sendNtfy pushes ev, with its attachment if enabled. If the server refuses
+// the attachment (a 4xx, e.g. attachments disabled or too large), it falls
+// back to the plain notification at once rather than retrying.
 func (d *Dispatcher) sendNtfy(ctx context.Context, ev Event) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.Ntfy.URL, bytes.NewBufferString(ev.Message))
+	if d.Ntfy.AttachICS && ev.Attachment != nil {
+		err := d.postNtfy(ctx, ev, ev.Attachment)
+		var status *statusError
+		if !errors.As(err, &status) || status.code >= 500 {
+			return err
+		}
+		d.Log.Warn("ntfy refused the attachment, sending without it", "err", err)
+	}
+	return d.postNtfy(ctx, ev, nil)
+}
+
+func (d *Dispatcher) postNtfy(ctx context.Context, ev Event, att *Attachment) error {
+	body := []byte(ev.Message)
+	if att != nil {
+		body = att.Data
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.Ntfy.URL, bytes.NewReader(body))
 	if err != nil {
 		return err
+	}
+	if att != nil {
+		// With a file as the body, the text travels in the Message header.
+		req.Header.Set("Filename", att.Filename)
+		req.Header.Set("Message", mimeEncode(ev.Message))
 	}
 	// ntfy reads RFC 2047 encoded headers, so non-ASCII titles survive.
 	req.Header.Set("Title", mimeEncode(ev.Title))
@@ -187,7 +223,14 @@ func do(c *http.Client, req *http.Request) error {
 	}
 	resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP %s", resp.Status)
+		return &statusError{code: resp.StatusCode, status: resp.Status}
 	}
 	return nil
 }
+
+type statusError struct {
+	code   int
+	status string
+}
+
+func (e *statusError) Error() string { return "HTTP " + e.status }

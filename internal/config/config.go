@@ -96,6 +96,9 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.Notifications.Ntfy.URL, "HIMA_NTFY_URL")
 	set(&c.Notifications.Ntfy.Token, "HIMA_NTFY_TOKEN")
 	set(&c.Notifications.Webhook.URL, "HIMA_WEBHOOK_URL")
+	if v := getenv("HIMA_NTFY_ATTACH_ICS"); v != "" {
+		c.Notifications.Ntfy.AttachICS = v == "true" || v == "1"
+	}
 }
 
 func (c *Config) applyDefaults() {
@@ -187,6 +190,8 @@ type Notifications struct {
 		// URL is the full topic URL, e.g. https://ntfy.sh/some-secret-topic.
 		URL   string `yaml:"url"`
 		Token string `yaml:"token"`
+		// AttachICS attaches the .ics to new-Booking notifications.
+		AttachICS bool `yaml:"attach_ics"`
 	} `yaml:"ntfy"`
 	Webhook struct {
 		URL string `yaml:"url"`

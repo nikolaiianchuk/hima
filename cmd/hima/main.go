@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -81,7 +82,7 @@ func run(log *slog.Logger) error {
 		Backoff: []time.Duration{2 * time.Second, 10 * time.Second, 30 * time.Second},
 	}
 	if n := cfg.Notifications.Ntfy; n.URL != "" {
-		notifier.Ntfy = &notify.NtfyConfig{URL: n.URL, Token: n.Token}
+		notifier.Ntfy = &notify.NtfyConfig{URL: n.URL, Token: n.Token, AttachICS: n.AttachICS}
 	}
 	if cfg.BaseURL != "" {
 		notifier.ClickURL = cfg.BaseURL + "/admin/"
@@ -89,7 +90,10 @@ func run(log *slog.Logger) error {
 
 	cals := calsource.New(cfg.Sources(), ics.Options{Location: avail.Location, OwnerEmails: cfg.Owner.Emails}, nil)
 	go cals.Run(ctx, 5*time.Minute, calendarWatcher(ctx, log, notifier))
-	svc := &booking.Service{Store: st, Availability: avail, Calendars: cals, Now: time.Now, Notifier: notifier}
+	svc := &booking.Service{
+		Store: st, Availability: avail, Calendars: cals, Now: time.Now, Notifier: notifier,
+		OwnerName: cfg.Owner.Name, UIDDomain: uidDomain(cfg.BaseURL),
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -168,4 +172,12 @@ func hashPassword() error {
 	}
 	fmt.Println(string(hash))
 	return nil
+}
+
+// uidDomain is the host of base_url, used to make calendar event UIDs unique.
+func uidDomain(baseURL string) string {
+	if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
+		return u.Hostname()
+	}
+	return "hima.invalid"
 }

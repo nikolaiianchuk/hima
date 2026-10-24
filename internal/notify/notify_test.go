@@ -119,3 +119,59 @@ func TestGivesUpAfterRetries(t *testing.T) {
 		t.Errorf("attempts = %d, want 2", got)
 	}
 }
+
+func TestNtfyAttachment(t *testing.T) {
+	st := newStore(t)
+	var ntfy recorder
+	srv := ntfy.server(t)
+	d := &Dispatcher{Store: st, Ntfy: &NtfyConfig{URL: srv.URL, AttachICS: true}, Log: discard}
+	d.Notify(context.Background(), Event{
+		Kind: Booked, At: time.Now(), Title: "New booking: Zoë", Message: "Mon 26 Oct · “café”",
+		Attachment: &Attachment{Filename: "booking.ics", Data: []byte("BEGIN:VCALENDAR")},
+	})
+	d.Wait(context.Background())
+	if len(ntfy.reqs) != 1 {
+		t.Fatalf("requests: %d", len(ntfy.reqs))
+	}
+	r := ntfy.reqs[0]
+	msg, _ := new(mime.WordDecoder).DecodeHeader(r.Header.Get("Message"))
+	if ntfy.bodies[0] != "BEGIN:VCALENDAR" || r.Header.Get("Filename") != "booking.ics" || msg != "Mon 26 Oct · “café”" {
+		t.Errorf("body=%q filename=%q message=%q", ntfy.bodies[0], r.Header.Get("Filename"), msg)
+	}
+}
+
+func TestNtfyAttachmentIgnoredUnlessEnabled(t *testing.T) {
+	st := newStore(t)
+	var ntfy recorder
+	srv := ntfy.server(t)
+	d := &Dispatcher{Store: st, Ntfy: &NtfyConfig{URL: srv.URL}, Log: discard}
+	d.Notify(context.Background(), Event{Kind: Booked, At: time.Now(), Title: "t", Message: "plain",
+		Attachment: &Attachment{Filename: "booking.ics", Data: []byte("ICS")}})
+	d.Wait(context.Background())
+	if ntfy.bodies[0] != "plain" || ntfy.reqs[0].Header.Get("Filename") != "" {
+		t.Errorf("body=%q", ntfy.bodies[0])
+	}
+}
+
+func TestNtfyFallsBackWhenAttachmentRefused(t *testing.T) {
+	st := newStore(t)
+	var bodies []string
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		bodies = append(bodies, string(body))
+		mu.Unlock()
+		if r.Header.Get("Filename") != "" {
+			http.Error(w, `{"code":40014,"error":"attachments not allowed"}`, http.StatusBadRequest)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	d := &Dispatcher{Store: st, Ntfy: &NtfyConfig{URL: srv.URL, AttachICS: true}, Log: discard, Backoff: []time.Duration{time.Millisecond}}
+	d.Notify(context.Background(), Event{Kind: Booked, At: time.Now(), Title: "t", Message: "plain",
+		Attachment: &Attachment{Filename: "booking.ics", Data: []byte("ICS")}})
+	d.Wait(context.Background())
+	if len(bodies) != 2 || bodies[0] != "ICS" || bodies[1] != "plain" {
+		t.Errorf("requests = %q, want attachment then plain fallback", bodies)
+	}
+}

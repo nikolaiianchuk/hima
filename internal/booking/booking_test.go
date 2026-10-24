@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,6 +72,8 @@ func newEnv(t *testing.T) *env {
 		Calendars: e.cals,
 		Now:       func() time.Time { return e.now },
 		Notifier:  e.events,
+		OwnerName: "Nikolai",
+		UIDDomain: "hima.example.com",
 	}
 	return e
 }
@@ -345,5 +348,21 @@ func TestFailedBookingDoesNotNotify(t *testing.T) {
 	e.Book(context.Background(), tok, at("2026-10-26 10:10"), 30*time.Minute, alex)
 	if len(e.events.events) != 0 {
 		t.Errorf("events: %+v", e.events.events)
+	}
+}
+
+func TestBookedEventCarriesICS(t *testing.T) {
+	e := newEnv(t)
+	tok := e.invite(t, NewInvite{Label: "for Alex", Location: "Café"})
+	e.Book(context.Background(), tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+	att := e.events.events[0].Attachment
+	if att == nil || att.Filename != "booking.ics" {
+		t.Fatalf("attachment = %+v", att)
+	}
+	for _, want := range []string{"UID:booking-1@hima.example.com", "SUMMARY:Alex ↔ Nikolai: catch-up", "LOCATION:Café",
+		"DESCRIPTION:catch-up\\n\\nBooked via invite: for Alex", "DTSTART:20261026T100000Z"} {
+		if !strings.Contains(string(att.Data), want) {
+			t.Errorf("ics missing %q:\n%s", want, att.Data)
+		}
 	}
 }

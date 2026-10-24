@@ -19,13 +19,7 @@ func (s *Server) handleFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	events := make([]ics.Event, len(bookings))
 	for i, b := range bookings {
-		ev := s.bookingEvent(r, b)
-		var via string
-		if b.InviteLabel != "" {
-			via = "Booked via invite: " + b.InviteLabel
-		}
-		ev.Notes = joinNonEmpty(b.Note, via)
-		events[i] = ev
+		events[i] = s.svc.OwnerEvent(b)
 	}
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
 	if err := ics.Write(w, "hima: bookings with "+s.cfg.Owner.Name, events...); err != nil {
