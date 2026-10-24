@@ -8,7 +8,7 @@ You need `base_url` set to hima's public HTTPS address: the redirect URI is buil
 
 1. Open [Google Cloud Console](https://console.cloud.google.com/), create a project (e.g. "hima").
 2. **APIs & Services → Library**: enable **Google Calendar API**.
-3. **OAuth consent screen**: user type *External*, fill in the app name and your email. Under **Test users**, add your own Google account. (Leaving the app in *Testing* is fine for personal use, but Google expires test-mode tokens after 7 days; publish the app (no verification needed for your own use with these scopes) to avoid reconnecting weekly.)
+3. **OAuth consent screen**: user type *External*, fill in the app name and your email. Under **Test users**, add your own Google account. While the app is in *Testing*, Google expires its tokens after 7 days, so you'd have to reconnect weekly. Switching it to *In production* avoids that; for calendar scopes Google then shows an "unverified app" warning you can click through for your own account. Check Google's current verification rules if you plan to let others connect.
 4. **Credentials → Create credentials → OAuth client ID**: type *Web application*; add the authorised redirect URI
    `https://hima.example.com/admin/oauth/google/callback`.
 5. Put the client ID and secret into `hima.yaml`:
