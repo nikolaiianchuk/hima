@@ -437,6 +437,8 @@ type FeedBox struct {
 	Active bool
 	Since  string
 	NewURL string
+	// WriteBack names the calendar Bookings are written to, if any.
+	WriteBack string
 }
 
 type BookingsPage struct {
@@ -472,6 +474,9 @@ templ Bookings(p BookingsPage) {
 					<h2 id="feed" style="font-size: 17px">Owner feed</h2>
 				</div>
 				<p class="ink-2" style="font-size: 14px; line-height: 1.55">Subscribe in your own calendar app to see every Booking, from 30 days ago onward.</p>
+				if p.Feed.WriteBack != "" {
+					<p class="small notice">Bookings are already written to { p.Feed.WriteBack }, so you probably don't need this feed; with both, each Booking shows twice.</p>
+				}
 				if p.Feed.NewURL != "" {
 					@copyRow("feedurl", "Owner feed URL", p.Feed.NewURL, "btn-outline")
 					<span class="small" style="font-weight: 700">Shown only once. Subscribe now.</span>
@@ -590,9 +595,18 @@ type SourceRow struct {
 	Error     string
 }
 
+type WriteBackRow struct {
+	Target    string
+	State     string
+	PillClass string
+	Last      string
+	Error     string
+}
+
 type SourcesPage struct {
 	AdminFrame
-	Sources []SourceRow
+	Sources   []SourceRow
+	WriteBack *WriteBackRow
 }
 
 templ Sources(p SourcesPage) {
@@ -620,7 +634,24 @@ templ Sources(p SourcesPage) {
 				}
 			</section>
 		}
-		<p class="small muted">Calendar sources are set in <span class="mono">hima.yaml</span> under <span class="mono">calendars</span>. hima reads them every 5 minutes. If one can't be read for an hour, Guests see no free times until it can.</p>
+		<p class="small muted">Calendar sources are set in <span class="mono">hima.yaml</span> under <span class="mono">calendars</span> (ICS links) and <span class="mono">caldav</span>. hima reads them every 5 minutes. If one can't be read for an hour, Guests see no free times until it can.</p>
+		if p.WriteBack != nil {
+			<h2 class="group-title">Write-back</h2>
+			<section class="card" style="gap: 12px">
+				<div class="row gap-12" style="justify-content: space-between">
+					<h2 style="font-size: 15px">Bookings are written to { p.WriteBack.Target }</h2>
+					<span class={ "pill", p.WriteBack.PillClass }>{ p.WriteBack.State }</span>
+				</div>
+				<dl class="kv">
+					<dt>Last written</dt>
+					<dd>{ p.WriteBack.Last }</dd>
+				</dl>
+				if p.WriteBack.Error != "" {
+					<p class="alert alert-danger mono" style="font-size: 13px">{ p.WriteBack.Error }</p>
+				}
+				<p class="small muted">New, moved and edited Bookings are added or updated there; cancelled ones are removed. hima leaves your other events alone.</p>
+			</section>
+		}
 	}
 }
 

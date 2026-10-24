@@ -45,7 +45,7 @@ func newServer(t *testing.T) *flakyServer {
 
 func TestBusyBeforeFirstFetchIsStale(t *testing.T) {
 	srv := newServer(t)
-	c := New([]Source{{URL: srv.URL}}, ics.Options{Location: time.UTC}, srv.Client())
+	c := New([]Source{{Fetcher: &ICSFeed{URL: srv.URL, Client: srv.Client()}}}, ics.Options{Location: time.UTC})
 	if _, err := c.Busy(from, to); !errors.Is(err, ErrStale) {
 		t.Fatalf("err = %v, want ErrStale", err)
 	}
@@ -53,7 +53,7 @@ func TestBusyBeforeFirstFetchIsStale(t *testing.T) {
 
 func TestUnionAndAllDayPerSource(t *testing.T) {
 	srv := newServer(t)
-	c := New([]Source{{URL: srv.URL}, {URL: srv.URL + "/2", AllDayBlocks: true}}, ics.Options{Location: time.UTC}, srv.Client())
+	c := New([]Source{{Fetcher: &ICSFeed{URL: srv.URL, Client: srv.Client()}}, {Fetcher: &ICSFeed{URL: srv.URL + "/2", Client: srv.Client()}, AllDayBlocks: true}}, ics.Options{Location: time.UTC})
 	if err := c.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestUnionAndAllDayPerSource(t *testing.T) {
 func TestLastGoodCopyThenStale(t *testing.T) {
 	srv := newServer(t)
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	c := New([]Source{{URL: srv.URL}}, ics.Options{Location: time.UTC}, srv.Client())
+	c := New([]Source{{Fetcher: &ICSFeed{URL: srv.URL, Client: srv.Client()}}}, ics.Options{Location: time.UTC})
 	c.now = func() time.Time { return now }
 	if err := c.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
@@ -94,7 +94,7 @@ func TestLastGoodCopyThenStale(t *testing.T) {
 func TestRefreshIfOlder(t *testing.T) {
 	srv := newServer(t)
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	c := New([]Source{{URL: srv.URL}}, ics.Options{Location: time.UTC}, srv.Client())
+	c := New([]Source{{Fetcher: &ICSFeed{URL: srv.URL, Client: srv.Client()}}}, ics.Options{Location: time.UTC})
 	c.now = func() time.Time { return now }
 	ctx := context.Background()
 
@@ -120,7 +120,7 @@ func TestRedact(t *testing.T) {
 func TestStatus(t *testing.T) {
 	srv := newServer(t)
 	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
-	c := New([]Source{{URL: srv.URL + "/secret/path.ics", AllDayBlocks: true}}, ics.Options{Location: time.UTC}, srv.Client())
+	c := New([]Source{{Fetcher: &ICSFeed{URL: srv.URL + "/secret/path.ics", Client: srv.Client()}, AllDayBlocks: true}}, ics.Options{Location: time.UTC})
 	c.now = func() time.Time { return now }
 	if st := c.Status(); st[0].Current || !st[0].LastSuccess.IsZero() {
 		t.Errorf("before fetch: %+v", st[0])

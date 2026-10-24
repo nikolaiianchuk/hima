@@ -66,6 +66,20 @@ notifications:
 # (at least 31, since Manage links work for 30 days after a meeting).
 retention_days: 90
 
+# Optional CalDAV account: read calendars as busy time, and/or write each
+# Booking into one of them (updated on reschedule, removed on cancel).
+#   Fastmail:  https://caldav.fastmail.com/dav/    (app password)
+#   iCloud:    https://caldav.icloud.com/          (app-specific password)
+#   Nextcloud: https://cloud.example.com/remote.php/dav/
+#   Radicale / Baïkal: your server's URL
+# caldav:
+#   url: https://caldav.fastmail.com/dav/
+#   username: you@fastmail.com
+#   password_file: /run/secrets/caldav   # or password: "…"
+#   read: [Personal, Work]   # omit to read every calendar, [] to read none
+#   all_day_blocks: false
+#   write: Personal          # omit to turn write-back off
+
 # Calendar sources: private ICS URLs. Everything in them counts as busy,
 # except events marked "free". (For webcal:// links, use https:// instead.)
 calendars:

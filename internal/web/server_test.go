@@ -24,6 +24,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
+	"github.com/nikolaiianchuk/hima/internal/writeback"
 )
 
 var lisbon, _ = time.LoadLocation("Europe/Lisbon")
@@ -646,4 +647,20 @@ func TestClientIP(t *testing.T) {
 			t.Errorf("clientIP(%s, %q) = %s, want %s", tc.remote, tc.xff, got, tc.want)
 		}
 	}
+}
+
+type fakeMirror struct{ status writeback.Status }
+
+func (f *fakeMirror) Upsert(store.Booking)     {}
+func (f *fakeMirror) Remove(store.Booking)     {}
+func (f *fakeMirror) Status() writeback.Status { return f.status }
+
+func TestWriteBackShownInAdmin(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	srv := ts.Config.Handler.(*Server)
+	srv.svc.Mirror = &fakeMirror{status: writeback.Status{Target: "Personal (dav.example.com)", LastError: errors.New("403 Forbidden")}}
+	_, body, _ := ts.get(t, "/admin/sources")
+	mustContain(t, body, "Bookings are written to Personal (dav.example.com)", "Last write failed", "403 Forbidden")
+	_, body, _ = ts.get(t, "/admin/bookings")
+	mustContain(t, body, "already written to Personal (dav.example.com)")
 }

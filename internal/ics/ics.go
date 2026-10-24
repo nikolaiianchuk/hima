@@ -45,19 +45,36 @@ type Options struct {
 	// OwnerEmails identify the Owner among an event's attendees, so events
 	// they declined can be ignored. Matching is case-insensitive.
 	OwnerEmails []string
+	// IgnoreUIDDomain skips events whose UID ends in "@"+IgnoreUIDDomain:
+	// hima's own Bookings written back to the Owner's calendar, which are
+	// already Busy blocks from the database.
+	IgnoreUIDDomain string
 }
 
 // Parse reads a feed.
 func Parse(r io.Reader, opts Options) (*Calendar, error) {
+	ic, err := ical.NewDecoder(r).Decode()
+	if err != nil {
+		return nil, fmt.Errorf("ics: %w", err)
+	}
+	return ParseCalendars([]*ical.Calendar{ic}, opts), nil
+}
+
+// ParseCalendars combines already-decoded calendars, e.g. one per CalDAV
+// object, into one Calendar.
+func ParseCalendars(ics []*ical.Calendar, opts Options) *Calendar {
 	loc := opts.Location
 	owner := make(map[string]bool, len(opts.OwnerEmails))
 	for _, e := range opts.OwnerEmails {
 		owner[strings.ToLower(strings.TrimSpace(e))] = true
 	}
-
-	ic, err := ical.NewDecoder(r).Decode()
-	if err != nil {
-		return nil, fmt.Errorf("ics: %w", err)
+	ignoreSuffix := ""
+	if opts.IgnoreUIDDomain != "" {
+		ignoreSuffix = "@" + strings.ToLower(opts.IgnoreUIDDomain)
+	}
+	var events []ical.Event
+	for _, ic := range ics {
+		events = append(events, ic.Events()...)
 	}
 
 	type override struct {
@@ -69,8 +86,11 @@ func Parse(r io.Reader, opts Options) (*Calendar, error) {
 		overrides []override
 		masters   = map[string]int{} // UID -> index of its recurring series
 	)
-	for _, ev := range ic.Events() {
+	for _, ev := range events {
 		uid, _ := ev.Props.Text(ical.PropUID)
+		if ignoreSuffix != "" && strings.HasSuffix(strings.ToLower(uid), ignoreSuffix) {
+			continue
+		}
 		isOverride := false
 		if rid := ev.Props.Get(ical.PropRecurrenceID); rid != nil {
 			at, err := dateTime(rid, loc)
@@ -106,7 +126,7 @@ func Parse(r io.Reader, opts Options) (*Calendar, error) {
 			cal.series[i].exdates[o.at.Unix()] = true
 		}
 	}
-	return &cal, nil
+	return &cal
 }
 
 // Busy returns the Busy blocks overlapping [from, to).

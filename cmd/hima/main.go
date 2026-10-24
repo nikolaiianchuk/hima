@@ -25,13 +25,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
+	"github.com/emersion/go-ical"
+
 	"github.com/nikolaiianchuk/hima/internal/booking"
+	"github.com/nikolaiianchuk/hima/internal/caldav"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/ics"
 	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web"
+	"github.com/nikolaiianchuk/hima/internal/writeback"
 )
 
 func main() {
@@ -99,11 +103,35 @@ func run(log *slog.Logger) error {
 		notifier.ClickURL = cfg.BaseURL + "/admin/"
 	}
 
-	cals := calsource.New(cfg.Sources(), ics.Options{Location: avail.Location, OwnerEmails: cfg.Owner.Emails}, nil)
+	acc := cfg.CalDAVAccount()
+	cals := calsource.New(cfg.Sources(acc, avail.Horizon), ics.Options{
+		Location:        avail.Location,
+		OwnerEmails:     cfg.Owner.Emails,
+		IgnoreUIDDomain: uidDomain(cfg.BaseURL),
+	})
 	go cals.Run(ctx, 5*time.Minute, calendarWatcher(ctx, log, notifier))
 	svc := &booking.Service{
 		Store: st, Availability: avail, Calendars: cals, Now: time.Now, Notifier: notifier,
 		OwnerName: cfg.Owner.Name, UIDDomain: uidDomain(cfg.BaseURL),
+	}
+	var mirror *writeback.Mirror
+	if acc != nil && cfg.CalDAV.Write != "" {
+		mirror = &writeback.Mirror{
+			Target:   &caldav.Writer{Account: acc, Calendar: cfg.CalDAV.Write},
+			Name:     cfg.CalDAV.Write + " (" + acc.Host() + ")",
+			Build:    func(b store.Booking) *ical.Calendar { return ics.Build("", svc.OwnerEvent(b)) },
+			Notifier: notifier,
+			Log:      log,
+			Backoff:  []time.Duration{5 * time.Second, 30 * time.Second, 2 * time.Minute},
+		}
+		svc.Mirror = mirror
+		go func() {
+			checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			if _, err := acc.Find(checkCtx, cfg.CalDAV.Write); err != nil {
+				log.Warn("caldav write calendar not usable", "err", err)
+			}
+		}()
 	}
 
 	go purgeDaily(ctx, log, st, time.Duration(cfg.RetentionDays)*24*time.Hour)
@@ -128,6 +156,9 @@ func run(log *slog.Logger) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
+	}
+	if mirror != nil {
+		mirror.Close(shutdownCtx)
 	}
 	notifier.Wait(shutdownCtx)
 	return nil

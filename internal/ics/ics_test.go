@@ -194,3 +194,17 @@ func TestWithoutOwnerEmailsDeclinedStillBlocks(t *testing.T) {
 		t.Errorf("busy = %v, want the event to block", got)
 	}
 }
+
+func TestIgnoresOwnBookings(t *testing.T) {
+	ics := feed(
+		event("UID:booking-7@hima.example.com", "DTSTART:20261026T090000Z", "DTEND:20261026T100000Z"),
+		event("UID:other@elsewhere", "DTSTART:20261026T110000Z", "DTEND:20261026T120000Z"),
+	)
+	cal, err := Parse(strings.NewReader(ics), Options{Location: lisbon, IgnoreUIDDomain: "hima.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cal.Busy(at("2026-10-26 00:00"), at("2026-10-27 00:00"), false); len(got) != 1 {
+		t.Errorf("busy = %v, want only the foreign event", got)
+	}
+}

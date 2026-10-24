@@ -5,10 +5,11 @@
 ## What it does
 
 - **Invites**: expiring links with a use count, allowed durations, an optional date range and a Location. Shown once, revocable, editable (expiry, uses, label).
-- **Free/busy from your calendars**: any number of private ICS URLs (Google, iCloud, Fastmail, Nextcloud, Outlook). Recurring events, moved or cancelled occurrences, events marked free, all-day events and invitations you declined are all handled. Guests only ever see free Slots, or optionally busy blocks, never titles.
+- **Free/busy from your calendars**: any number of private ICS URLs (Google, iCloud, Fastmail, Nextcloud, Outlook), and/or a CalDAV account. Recurring events, moved or cancelled occurrences, events marked free, all-day events and invitations you declined are all handled. Guests only ever see free Slots, or optionally busy blocks, never titles.
 - **Availability**: weekly hours in your time zone, buffers, minimum notice, booking horizon.
 - **Guests** pick a Slot in their own time zone, give their name, get a `.ics` file and a private Manage link to reschedule or cancel.
-- **Your calendar**: a private feed of all Bookings to subscribe to.
+- **Your calendar**: Bookings written straight into a CalDAV calendar (updated on reschedule, removed on cancel), or a private feed to subscribe to.
+- **Abuse limits**: optional cap on Bookings per day, plus rate limits on booking and login.
 - **Notifications** via ntfy (optionally with the `.ics` attached) and/or a webhook, plus an activity log.
 - **Your look**: pick an accent colour in Settings; it applies to the admin and every Guest page.
 - **Small and private**: one Go binary, one SQLite file, fonts bundled (Guest pages make no third-party requests), no outgoing calls except to your calendars and notification endpoints. Old data is deleted after 90 days.

@@ -60,6 +60,27 @@ type Service struct {
 	// UIDDomain makes calendar event UIDs globally unique, e.g. the host of
 	// base_url.
 	UIDDomain string
+	// Mirror, if set, keeps Bookings in the Owner's own calendar.
+	Mirror Mirror
+}
+
+// Mirror copies Bookings into the Owner's calendar (CalDAV write-back). It
+// works in the background; failures never affect the Booking.
+type Mirror interface {
+	Upsert(store.Booking)
+	Remove(store.Booking)
+}
+
+func (s *Service) mirrorUpsert(b store.Booking) {
+	if s.Mirror != nil {
+		s.Mirror.Upsert(b)
+	}
+}
+
+func (s *Service) mirrorRemove(b store.Booking) {
+	if s.Mirror != nil {
+		s.Mirror.Remove(b)
+	}
 }
 
 func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message string, b store.Booking) {
@@ -324,6 +345,7 @@ func (s *Service) Book(ctx context.Context, tok string, start time.Time, d time.
 		msg += " · via " + b.InviteLabel
 	}
 	s.notify(ctx, notify.Booked, "New booking: "+b.GuestName, msg, b)
+	s.mirrorUpsert(b)
 	return b, manage, nil
 }
 
@@ -387,6 +409,7 @@ func (s *Service) CancelByGuest(ctx context.Context, tok string) error {
 		return err
 	}
 	s.notify(ctx, notify.CancelledByGuest, m.GuestName+" cancelled", s.when(m.Booking), m.Booking)
+	s.mirrorRemove(m.Booking)
 	return nil
 }
 
@@ -420,6 +443,7 @@ func (s *Service) Reschedule(ctx context.Context, tok string, start time.Time) (
 	b := m.Booking
 	b.Start, b.End, b.Sequence, b.Reschedules = start, start.Add(d), b.Sequence+1, b.Reschedules+1
 	s.notify(ctx, notify.Rescheduled, b.GuestName+" rescheduled", s.when(m.Booking)+" → "+s.when(b), b)
+	s.mirrorUpsert(b)
 	return b, nil
 }
 
@@ -436,6 +460,7 @@ func (s *Service) CancelByOwner(ctx context.Context, id int64) error {
 		return err
 	}
 	s.notify(ctx, notify.CancelledByOwner, "You cancelled "+b.GuestName+"'s booking", s.when(b), b)
+	s.mirrorRemove(b)
 	return nil
 }
 
@@ -487,7 +512,8 @@ func (s *Service) EditBooking(ctx context.Context, id int64, location, note stri
 	if err := s.Store.UpdateBookingDetails(ctx, id, location, note); err != nil {
 		return err
 	}
-	b.Location, b.Note = location, note
+	b.Location, b.Note, b.Sequence = location, note, b.Sequence+1
 	s.notify(ctx, notify.EditedByOwner, "You updated "+b.GuestName+"'s booking", s.when(b), b)
+	s.mirrorUpsert(b)
 	return nil
 }

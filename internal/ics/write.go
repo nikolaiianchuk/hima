@@ -25,6 +25,11 @@ type Event struct {
 // Write encodes events as an iCalendar file. A non-empty name marks it as a
 // subscribable feed: it gets a display name and a refresh hint.
 func Write(w io.Writer, name string, events ...Event) error {
+	return ical.NewEncoder(w).Encode(Build(name, events...))
+}
+
+// Build assembles events into a calendar, as Write does without encoding.
+func Build(name string, events ...Event) *ical.Calendar {
 	cal := ical.NewCalendar()
 	cal.Props.SetText(ical.PropVersion, "2.0")
 	cal.Props.SetText(ical.PropProductID, "-//hima//hima//EN")
@@ -73,5 +78,5 @@ func Write(w io.Writer, name string, events ...Event) error {
 		ev.SetStatus(status)
 		cal.Children = append(cal.Children, ev.Component)
 	}
-	return ical.NewEncoder(w).Encode(cal)
+	return cal
 }

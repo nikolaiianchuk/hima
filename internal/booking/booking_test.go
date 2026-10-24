@@ -3,6 +3,7 @@ package booking
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -472,5 +473,31 @@ func TestMaxBookingsPerDay(t *testing.T) {
 	_, manage, _ := e.Book(ctx, tok, at("2026-10-27 10:00"), 30*time.Minute, alex)
 	if _, err := e.Reschedule(ctx, manage, at("2026-10-26 11:30")); !errors.Is(err, ErrSlotUnavailable) {
 		t.Errorf("moving onto a full day: err = %v", err)
+	}
+}
+
+type fakeMirror struct{ ops []string }
+
+func (f *fakeMirror) Upsert(b store.Booking) {
+	f.ops = append(f.ops, fmt.Sprintf("upsert %d seq %d", b.ID, b.Sequence))
+}
+func (f *fakeMirror) Remove(b store.Booking) { f.ops = append(f.ops, fmt.Sprintf("remove %d", b.ID)) }
+
+func TestMirrorFollowsBookings(t *testing.T) {
+	e := newEnv(t)
+	m := &fakeMirror{}
+	e.Mirror = m
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{MaxUses: 2})
+	b, manage, _ := e.Book(ctx, tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+	e.Reschedule(ctx, manage, at("2026-10-27 10:00"))
+	e.EditBooking(ctx, b.ID, "Café", "")
+	e.CancelByGuest(ctx, manage)
+	b2, _, _ := e.Book(ctx, tok, at("2026-10-28 10:00"), 30*time.Minute, alex)
+	e.CancelByOwner(ctx, b2.ID)
+	e.Book(ctx, tok, at("2026-10-26 10:10"), 30*time.Minute, alex) // refused: no mirror call
+	want := []string{"upsert 1 seq 0", "upsert 1 seq 1", "upsert 1 seq 2", "remove 1", "upsert 2 seq 0", "remove 2"}
+	if fmt.Sprint(m.ops) != fmt.Sprint(want) {
+		t.Errorf("ops = %v, want %v", m.ops, want)
 	}
 }

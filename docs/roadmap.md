@@ -24,10 +24,10 @@ Terms follow [CONTEXT.md](../CONTEXT.md). Decisions: [docs/adr](./adr).
 - ~~Week-grid view of Busy blocks for Invites that opt in~~ (done as a per-day busy bar in the new design)
 - ~~Align the UI with the Owner's design~~ (done)
 
-## Phase 2 — write-back
+## Phase 2 — write-back (done)
 
-- CalDAV as Calendar source and write target (Radicale, Baïkal, iCloud, Fastmail)
-- Rate limiting per Invite / per IP, daily Booking cap on Availability
+- ~~CalDAV as Calendar source and write target (Radicale, Baïkal, iCloud, Fastmail)~~
+- ~~Rate limiting per Invite / per IP, daily Booking cap on Availability~~
 
 ## Phase 3 — big providers
 

@@ -29,6 +29,7 @@ const (
 	EditedByOwner     Kind = "edited_by_owner"
 	CalendarFailing   Kind = "calendar_failing"
 	CalendarRecovered Kind = "calendar_recovered"
+	WriteBackFailed   Kind = "write_back_failed"
 )
 
 // Event is something the Owner should know about.
@@ -148,6 +149,7 @@ var ntfyTags = map[Kind]string{
 	Rescheduled:       "arrows_counterclockwise",
 	CancelledByGuest:  "x",
 	CalendarFailing:   "warning",
+	WriteBackFailed:   "warning",
 	CalendarRecovered: "white_check_mark",
 }
 

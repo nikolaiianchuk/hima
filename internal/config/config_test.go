@@ -26,6 +26,8 @@ func TestLoad(t *testing.T) {
 		{name: "unknown timezone", yaml: "auth: {mode: proxy}\navailability: {timezone: Mars/Olympus}", wantErr: true},
 		{name: "webcal url", yaml: "auth: {mode: proxy}\ncalendars: [{url: 'webcal://x/y.ics'}]", wantErr: true},
 		{name: "retention too short", yaml: "auth: {mode: proxy}\nretention_days: 7", wantErr: true},
+		{name: "caldav without password", yaml: "auth: {mode: proxy}\ncaldav: {url: 'https://dav.example.com', username: me}", wantErr: true},
+		{name: "caldav ok", yaml: "auth: {mode: proxy}\ncaldav: {url: 'https://dav.example.com', username: me, password: x}", wantListen: "127.0.0.1:8080"},
 		{name: "env overrides file", yaml: "auth: {mode: password}", env: map[string]string{"HIMA_AUTH_MODE": "proxy"}, wantListen: "127.0.0.1:8080"},
 	}
 	for _, tt := range tests {
@@ -92,5 +94,27 @@ func TestAvailabilityDefaultsToWeekdayOfficeHours(t *testing.T) {
 	a, _ := c.Availability()
 	if len(a.Weekly[time.Friday]) != 1 || len(a.Weekly[time.Sunday]) != 0 || a.Horizon != 30*24*time.Hour {
 		t.Errorf("unexpected defaults: %+v", a)
+	}
+}
+
+func TestCalDAVPasswordFileAndRead(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "pw"), []byte("s3cret\n"), 0o600)
+	path := filepath.Join(dir, "hima.yaml")
+	os.WriteFile(path, []byte("auth: {mode: proxy}\ncaldav: {url: 'https://dav.example.com', username: me, password_file: '"+filepath.Join(dir, "pw")+"', read: [], write: Personal}"), 0o600)
+	c, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.CalDAV.Password != "s3cret" {
+		t.Errorf("password = %q", c.CalDAV.Password)
+	}
+	// read: [] turns reading off, so only write-back remains.
+	if got := c.Sources(c.CalDAVAccount(), time.Hour); len(got) != 0 {
+		t.Errorf("sources = %d, want 0", len(got))
+	}
+	c.CalDAV.Read = nil
+	if got := c.Sources(c.CalDAVAccount(), time.Hour); len(got) != 1 || got[0].Fetcher.Name() != "CalDAV dav.example.com (all calendars)" {
+		t.Errorf("sources = %+v", got)
 	}
 }

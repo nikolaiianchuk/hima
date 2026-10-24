@@ -18,6 +18,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web/views"
+	"github.com/nikolaiianchuk/hima/internal/writeback"
 )
 
 // standardDurations are always offered in the new-Invite form, alongside the
@@ -42,6 +43,14 @@ func (s *Server) frame(current string) views.AdminFrame {
 }
 
 func (s *Server) ownerLoc() *time.Location { return s.svc.Availability.Location }
+
+// writeBack reports on CalDAV write-back, if it is configured.
+func (s *Server) writeBack() (writeback.Status, bool) {
+	if st, ok := s.svc.Mirror.(interface{ Status() writeback.Status }); ok {
+		return st.Status(), true
+	}
+	return writeback.Status{}, false
+}
 
 func (s *Server) sourceStatus() []calsource.SourceStatus {
 	if st, ok := s.svc.Calendars.(sourceStatuser); ok {
@@ -523,6 +532,9 @@ func (s *Server) renderBookings(w http.ResponseWriter, r *http.Request, status i
 		return
 	}
 	p := views.BookingsPage{AdminFrame: s.frame("bookings"), Error: errMsg, Feed: views.FeedBox{NewURL: newFeedURL}}
+	if wb, ok := s.writeBack(); ok {
+		p.Feed.WriteBack = wb.Target
+	}
 	if since, err := s.svc.FeedCreatedAt(ctx); err != nil {
 		s.fail(w, r, err)
 		return
@@ -677,6 +689,16 @@ func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 			row.Error = st.LastError.Error()
 		}
 		p.Sources = append(p.Sources, row)
+	}
+	if wb, ok := s.writeBack(); ok {
+		row := &views.WriteBackRow{Target: wb.Target, State: "Working", PillClass: "pill-accent", Last: "Nothing written yet"}
+		if !wb.LastSuccess.IsZero() {
+			row.Last = agoLabel(now, wb.LastSuccess)
+		}
+		if wb.LastError != nil {
+			row.State, row.PillClass, row.Error = "Last write failed", "pill-danger", wb.LastError.Error()
+		}
+		p.WriteBack = row
 	}
 	s.render(w, r, http.StatusOK, views.Sources(p))
 }

@@ -2,9 +2,11 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/nikolaiianchuk/hima/internal/caldav"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 )
@@ -90,10 +92,27 @@ func (c *Config) Availability() (schedule.Availability, error) {
 }
 
 // Sources returns the configured Calendar sources.
-func (c *Config) Sources() []calsource.Source {
-	out := make([]calsource.Source, len(c.Calendars))
-	for i, cc := range c.Calendars {
-		out[i] = calsource.Source{URL: cc.URL, AllDayBlocks: cc.AllDayBlocks}
+// Sources returns the configured Calendar sources: every ICS URL, plus the
+// CalDAV account's calendars when acc is set and reading isn't turned off.
+func (c *Config) Sources(acc *caldav.Account, horizon time.Duration) []calsource.Source {
+	client := &http.Client{Timeout: 30 * time.Second}
+	var out []calsource.Source
+	for _, cc := range c.Calendars {
+		out = append(out, calsource.Source{Fetcher: &calsource.ICSFeed{URL: cc.URL, Client: client}, AllDayBlocks: cc.AllDayBlocks})
+	}
+	if acc != nil && (c.CalDAV.Read == nil || len(c.CalDAV.Read) > 0) {
+		out = append(out, calsource.Source{
+			Fetcher:      &caldav.Source{Account: acc, Calendars: c.CalDAV.Read, Horizon: horizon},
+			AllDayBlocks: c.CalDAV.AllDayBlocks,
+		})
 	}
 	return out
+}
+
+// CalDAVAccount returns the configured CalDAV account, or nil.
+func (c *Config) CalDAVAccount() *caldav.Account {
+	if c.CalDAV.URL == "" {
+		return nil
+	}
+	return &caldav.Account{URL: c.CalDAV.URL, Username: c.CalDAV.Username, Password: c.CalDAV.Password}
 }

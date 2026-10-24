@@ -7,6 +7,7 @@ tool github.com/a-h/templ/cmd/templ
 require (
 	github.com/a-h/templ v0.3.1070
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
+	github.com/emersion/go-webdav v0.7.0
 	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/crypto v0.58.0
 	golang.org/x/term v0.47.0

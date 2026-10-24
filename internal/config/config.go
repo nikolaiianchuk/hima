@@ -36,6 +36,9 @@ type Config struct {
 	RetentionDays int `yaml:"retention_days"`
 	// Calendars are the Calendar sources whose events are Busy blocks.
 	Calendars []CalendarConfig `yaml:"calendars"`
+	// CalDAV is an optional account to read calendars from and write
+	// Bookings to.
+	CalDAV CalDAVConfig `yaml:"caldav"`
 }
 
 type Owner struct {
@@ -73,6 +76,13 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	c.applyEnv(os.Getenv)
+	if f := c.CalDAV.PasswordFile; f != "" {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return nil, fmt.Errorf("caldav.password_file: %w", err)
+		}
+		c.CalDAV.Password = strings.TrimSpace(string(b))
+	}
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -99,6 +109,11 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.Notifications.Ntfy.URL, "HIMA_NTFY_URL")
 	set(&c.Notifications.Ntfy.Token, "HIMA_NTFY_TOKEN")
 	set(&c.Notifications.Webhook.URL, "HIMA_WEBHOOK_URL")
+	set(&c.CalDAV.URL, "HIMA_CALDAV_URL")
+	set(&c.CalDAV.Username, "HIMA_CALDAV_USERNAME")
+	set(&c.CalDAV.Password, "HIMA_CALDAV_PASSWORD")
+	set(&c.CalDAV.PasswordFile, "HIMA_CALDAV_PASSWORD_FILE")
+	set(&c.CalDAV.Write, "HIMA_CALDAV_WRITE")
 	if v := getenv("HIMA_NTFY_ATTACH_ICS"); v != "" {
 		c.Notifications.Ntfy.AttachICS = v == "true" || v == "1"
 	}
@@ -151,6 +166,14 @@ func (c *Config) Validate() error {
 	for name, u := range map[string]string{"notifications.ntfy.url": c.Notifications.Ntfy.URL, "notifications.webhook.url": c.Notifications.Webhook.URL} {
 		if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
 			return fmt.Errorf("%s must be an http(s) URL", name)
+		}
+	}
+	if dav := c.CalDAV; dav.URL != "" {
+		if !strings.HasPrefix(dav.URL, "https://") && !strings.HasPrefix(dav.URL, "http://") {
+			return errors.New("caldav.url must be an http(s) URL")
+		}
+		if dav.Username == "" || dav.Password == "" {
+			return errors.New("caldav needs username and password (or password_file); use an app password where your provider offers one")
 		}
 	}
 	for i, cal := range c.Calendars {
@@ -206,4 +229,17 @@ type Notifications struct {
 	Webhook struct {
 		URL string `yaml:"url"`
 	} `yaml:"webhook"`
+}
+
+type CalDAVConfig struct {
+	URL          string `yaml:"url"`
+	Username     string `yaml:"username"`
+	Password     string `yaml:"password"`
+	PasswordFile string `yaml:"password_file"`
+	// Read names the calendars that are Calendar sources. Omitted reads every
+	// calendar; an empty list reads none.
+	Read         []string `yaml:"read"`
+	AllDayBlocks bool     `yaml:"all_day_blocks"`
+	// Write names the calendar Bookings are written to; empty disables it.
+	Write string `yaml:"write"`
 }
