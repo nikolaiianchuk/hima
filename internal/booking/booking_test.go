@@ -388,3 +388,62 @@ func TestRescheduleEventCarriesUpdatedICS(t *testing.T) {
 		t.Error("cancellation should not carry an attachment")
 	}
 }
+
+func TestEditInvite(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{Label: "for Alex", ExpiresIn: time.Hour})
+	inv, _ := e.Invite(ctx, tok)
+	e.Book(ctx, tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+
+	// Used up and then expired: adding a use and extending revives it.
+	e.now = e.now.Add(2 * time.Hour)
+	if err := e.EditInvite(ctx, inv.ID, InviteEdit{Label: " Alex & Sam ", MaxUses: 2, ExpiresAt: e.now.Add(48 * time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.Invite(ctx, tok)
+	if err != nil {
+		t.Fatalf("edited invite should be active: %v", err)
+	}
+	if got.Label != "Alex & Sam" || got.MaxUses != 2 || got.Durations[0] != 30*time.Minute {
+		t.Errorf("edited invite %+v", got)
+	}
+
+	var inputErr *InputError
+	for name, edit := range map[string]InviteEdit{
+		"below uses": {MaxUses: 0, ExpiresAt: e.now.Add(time.Hour)},
+		"past":       {MaxUses: 2, ExpiresAt: e.now.Add(-time.Minute)},
+	} {
+		if err := e.EditInvite(ctx, inv.ID, edit); !errors.As(err, &inputErr) {
+			t.Errorf("%s: err = %v, want InputError", name, err)
+		}
+	}
+	e.Store.RevokeInvite(ctx, inv.ID, e.now)
+	if err := e.EditInvite(ctx, inv.ID, InviteEdit{MaxUses: 5, ExpiresAt: e.now.Add(time.Hour)}); !errors.As(err, &inputErr) {
+		t.Errorf("revoked: err = %v, want InputError", err)
+	}
+}
+
+func TestEditBooking(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{Location: "Café"})
+	b, manage, _ := e.Book(ctx, tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+
+	if err := e.EditBooking(ctx, b.ID, " https://meet.jit.si/abc ", "bring photos"); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := e.Manage(ctx, manage)
+	if m.Location != "https://meet.jit.si/abc" || m.Note != "bring photos" || m.Sequence != 1 {
+		t.Errorf("edited booking %+v", m.Booking)
+	}
+	last := e.events.events[len(e.events.events)-1]
+	if last.Kind != notify.EditedByOwner || !last.Silent {
+		t.Errorf("event %+v", last)
+	}
+
+	e.now = at("2026-10-26 10:30") // over
+	if err := e.EditBooking(ctx, b.ID, "x", ""); !errors.Is(err, ErrLocked) {
+		t.Errorf("after end: err = %v", err)
+	}
+}

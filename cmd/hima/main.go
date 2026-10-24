@@ -95,6 +95,8 @@ func run(log *slog.Logger) error {
 		OwnerName: cfg.Owner.Name, UIDDomain: uidDomain(cfg.BaseURL),
 	}
 
+	go purgeDaily(ctx, log, st, time.Duration(cfg.RetentionDays)*24*time.Hour)
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           web.New(cfg, st, svc, log),
@@ -180,4 +182,25 @@ func uidDomain(baseURL string) string {
 		return u.Hostname()
 	}
 	return "hima.invalid"
+}
+
+// purgeDaily deletes data older than retention at startup and then daily.
+func purgeDaily(ctx context.Context, log *slog.Logger, st *store.Store, retention time.Duration) {
+	t := time.NewTicker(24 * time.Hour)
+	defer t.Stop()
+	for {
+		now := time.Now()
+		if p, err := st.Purge(ctx, now.Add(-retention), now); err != nil {
+			if ctx.Err() == nil {
+				log.Error("purge old data", "err", err)
+			}
+		} else if p != (store.Purged{}) {
+			log.Info("purged old data", "bookings", p.Bookings, "invites", p.Invites, "activity", p.Activity, "sessions", p.Sessions)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

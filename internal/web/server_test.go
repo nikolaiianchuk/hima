@@ -398,3 +398,34 @@ func TestActivityLog(t *testing.T) {
 	_, body, _ := ts.get(t, "/admin/")
 	mustContain(t, body, "New booking: Alex", "Alex cancelled")
 }
+
+func TestOwnerEditsInviteAndBooking(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	manage := ts.book(t, "Alex") // 1 use: invite now used up
+
+	_, body, _ := ts.get(t, "/admin/")
+	mustContain(t, body, `action="/admin/invites/1"`, `action="/admin/bookings/1"`)
+
+	// Below the uses already made is refused with a message.
+	status, body, _ := ts.post(t, "/admin/invites/1", url.Values{"label": {"x"}, "max_uses": {"0"}, "expires_at": {"2026-11-05T18:00"}})
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("bad edit: %d", status)
+	}
+	mustContain(t, body, "at least one use")
+
+	if status, _, _ := ts.post(t, "/admin/invites/1", url.Values{"label": {"for Alex & Sam"}, "max_uses": {"2"}, "expires_at": {"2026-11-05T18:00"}}); status != http.StatusSeeOther {
+		t.Fatalf("edit invite: %d", status)
+	}
+	_, body, _ = ts.get(t, "/admin/")
+	mustContain(t, body, "for Alex &amp; Sam", "1 / 2", "Thu 5 Nov 18:00", ">active<")
+
+	if status, _, _ := ts.post(t, "/admin/bookings/1", url.Values{"location": {"https://meet.jit.si/abc"}, "note": {"bring photos"}}); status != http.StatusSeeOther {
+		t.Fatalf("edit booking: %d", status)
+	}
+	_, body, _ = ts.get(t, manage+"?tz=Europe/Lisbon")
+	mustContain(t, body, "https://meet.jit.si/abc", "bring photos")
+	_, body, _ = ts.get(t, manage+"/event.ics")
+	mustContain(t, body, "SEQUENCE:1", "LOCATION:https://meet.jit.si/abc")
+	_, body, _ = ts.get(t, "/admin/")
+	mustContain(t, body, "You updated Alex&#39;s booking")
+}

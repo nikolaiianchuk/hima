@@ -182,3 +182,18 @@ func fromNull(n sql.NullInt64) time.Time {
 	}
 	return time.Unix(n.Int64, 0)
 }
+
+// UpdateInvite changes what may change after an Invite is shared: its Label,
+// use count and expiry. Revoked Invites cannot be changed.
+func (s *Store) UpdateInvite(ctx context.Context, id int64, label string, maxUses int, expiresAt time.Time) error {
+	res, err := s.db.ExecContext(ctx,
+		"UPDATE invites SET label = ?, max_uses = ?, expires_at = ? WHERE id = ? AND revoked_at IS NULL",
+		label, maxUses, expiresAt.Unix(), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

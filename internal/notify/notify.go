@@ -26,6 +26,7 @@ const (
 	Rescheduled       Kind = "rescheduled"
 	CancelledByGuest  Kind = "cancelled_by_guest"
 	CancelledByOwner  Kind = "cancelled_by_owner"
+	EditedByOwner     Kind = "edited_by_owner"
 	CalendarFailing   Kind = "calendar_failing"
 	CalendarRecovered Kind = "calendar_recovered"
 )

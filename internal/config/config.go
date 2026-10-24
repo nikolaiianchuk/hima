@@ -31,6 +31,9 @@ type Config struct {
 	AvailabilityConfig AvailabilityConfig `yaml:"availability"`
 	InviteDefaults     InviteDefaults     `yaml:"invite_defaults"`
 	Notifications      Notifications      `yaml:"notifications"`
+	// RetentionDays is how long past Bookings, dead Invites and activity are
+	// kept before being deleted.
+	RetentionDays int `yaml:"retention_days"`
 	// Calendars are the Calendar sources whose events are Busy blocks.
 	Calendars []CalendarConfig `yaml:"calendars"`
 }
@@ -118,6 +121,9 @@ func (c *Config) applyDefaults() {
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
 	c.AvailabilityConfig.applyDefaults()
 	c.InviteDefaults.applyDefaults()
+	if c.RetentionDays == 0 {
+		c.RetentionDays = 90
+	}
 }
 
 func (c *Config) Validate() error {
@@ -137,6 +143,10 @@ func (c *Config) Validate() error {
 	}
 	if err := c.InviteDefaults.validate(); err != nil {
 		return err
+	}
+	// Manage links work for 30 days after a Booking ends; keep it at least that long.
+	if c.RetentionDays < 31 {
+		return errors.New("retention_days must be at least 31")
 	}
 	for name, u := range map[string]string{"notifications.ntfy.url": c.Notifications.Ntfy.URL, "notifications.webhook.url": c.Notifications.Webhook.URL} {
 		if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {

@@ -61,6 +61,10 @@ notifications:
   webhook:
     url: ""               # receives a JSON POST per event
 
+# Past Bookings, dead Invites and activity older than this are deleted
+# (at least 31, since Manage links work for 30 days after a meeting).
+retention_days: 90
+
 # Calendar sources: private ICS URLs. Everything in them counts as busy,
 # except events marked "free". (For webcal:// links, use https:// instead.)
 calendars:

@@ -85,7 +85,8 @@ func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message s
 			GuestName: b.GuestName, Note: b.Note, Location: b.Location,
 			InviteLabel: b.InviteLabel, Start: b.Start, End: b.End,
 		},
-		Silent: kind == notify.CancelledByOwner,
+		// The Owner's own actions are logged, not pushed back to them.
+		Silent: kind == notify.CancelledByOwner || kind == notify.EditedByOwner,
 	})
 }
 
@@ -403,5 +404,58 @@ func (s *Service) CancelByOwner(ctx context.Context, id int64) error {
 		return err
 	}
 	s.notify(ctx, notify.CancelledByOwner, "You cancelled "+b.GuestName+"'s booking", s.when(b), b)
+	return nil
+}
+
+// InviteEdit is what may change on an Invite after it is shared. Durations,
+// date range and Location stay fixed so Guests never see the rules change.
+type InviteEdit struct {
+	Label     string
+	MaxUses   int
+	ExpiresAt time.Time
+}
+
+// EditInvite applies e. Extending an Expired or Used up Invite makes it
+// Active again; a Revoked Invite stays revoked.
+func (s *Service) EditInvite(ctx context.Context, id int64, e InviteEdit) error {
+	inv, err := s.Store.InviteByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !inv.RevokedAt.IsZero() {
+		return &InputError{"A revoked invite can't be changed."}
+	}
+	if e.MaxUses < 1 {
+		return &InputError{"An invite needs at least one use."}
+	}
+	if e.MaxUses < inv.Uses {
+		return &InputError{fmt.Sprintf("Uses can't be lower than the %d already used.", inv.Uses)}
+	}
+	if !e.ExpiresAt.After(s.Now()) {
+		return &InputError{"The expiry must be in the future. Revoke the invite to stop it now."}
+	}
+	return s.Store.UpdateInvite(ctx, id, strings.TrimSpace(e.Label), e.MaxUses, e.ExpiresAt)
+}
+
+// EditBooking changes a Booking's Location and note from the admin. Only
+// Bookings that are neither cancelled nor over can change; the Owner tells
+// the Guest themselves.
+func (s *Service) EditBooking(ctx context.Context, id int64, location, note string) error {
+	b, err := s.Store.BookingByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if b.Cancelled() || !s.Now().Before(b.End) {
+		return ErrLocked
+	}
+	location, note = strings.TrimSpace(location), strings.TrimSpace(note)
+	if utf8.RuneCountInString(note) > 1000 {
+		return &InputError{"The note is too long."}
+	}
+	if err := s.Store.UpdateBookingDetails(ctx, id, location, note); err != nil {
+		return err
+	}
+	b.Location, b.Note = location, note
+	s.notify(ctx, notify.EditedByOwner, "You updated "+b.GuestName+"'s booking", s.when(b), b)
 	return nil
 }

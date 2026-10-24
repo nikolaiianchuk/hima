@@ -25,6 +25,7 @@ func TestLoad(t *testing.T) {
 		{name: "bad range", yaml: "auth: {mode: proxy}\navailability: {weekly: {mon: ['12:00-10:00']}}", wantErr: true},
 		{name: "unknown timezone", yaml: "auth: {mode: proxy}\navailability: {timezone: Mars/Olympus}", wantErr: true},
 		{name: "webcal url", yaml: "auth: {mode: proxy}\ncalendars: [{url: 'webcal://x/y.ics'}]", wantErr: true},
+		{name: "retention too short", yaml: "auth: {mode: proxy}\nretention_days: 7", wantErr: true},
 		{name: "env overrides file", yaml: "auth: {mode: password}", env: map[string]string{"HIMA_AUTH_MODE": "proxy"}, wantListen: "127.0.0.1:8080"},
 	}
 	for _, tt := range tests {

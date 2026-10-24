@@ -198,3 +198,18 @@ func scanBooking(row scanner) (Booking, error) {
 	b.CancelledAt = fromNull(cancelled)
 	return b, nil
 }
+
+// UpdateBookingDetails changes a live Booking's Location and note, bumping
+// its sequence so calendars pick up the change.
+func (s *Store) UpdateBookingDetails(ctx context.Context, id int64, location, note string) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE bookings SET location = ?, note = ?, sequence = sequence + 1
+		WHERE id = ? AND cancelled_at IS NULL`, location, note, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

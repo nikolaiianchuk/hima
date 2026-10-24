@@ -1,8 +1,13 @@
 package views
 
 type AdminInvite struct {
-	ID        int64
-	Label     string
+	ID           int64
+	Label        string
+	RawLabel     string
+	Editable     bool
+	MaxUses      int
+	UsedCount    int
+	ExpiresInput string
 	State     string
 	Uses      string
 	Expires   string
@@ -12,6 +17,7 @@ type AdminInvite struct {
 }
 
 type AdminBooking struct {
+	Editable    bool
 	ID          int64
 	When        string
 	GuestName   string
@@ -46,6 +52,7 @@ type ActivityItem struct {
 }
 
 type AdminPage struct {
+	EditError string
 	FeedSince string
 	Activity  []ActivityItem
 	OwnerName string
@@ -70,6 +77,9 @@ templ Admin(p AdminPage) {
 		</div>
 		if p.Warning != "" {
 			<p class="error">{ p.Warning }</p>
+		}
+		if p.EditError != "" {
+			<p class="error">{ p.EditError }</p>
 		}
 		<h2>New invite</h2>
 		if p.Error != "" {
@@ -138,6 +148,19 @@ templ Admin(p AdminPage) {
 										<button type="submit" class="danger small">Cancel</button>
 									</form>
 								}
+								if b.Editable {
+									<details class="small">
+										<summary>Edit</summary>
+										<form method="post" action={ templ.SafeURL("/admin/bookings/" + itoa64(b.ID)) }>
+											<label for={ "loc-" + itoa64(b.ID) }>Location</label>
+											<input id={ "loc-" + itoa64(b.ID) } type="text" name="location" value={ b.Location }/>
+											<label for={ "note-" + itoa64(b.ID) }>Note</label>
+											<textarea id={ "note-" + itoa64(b.ID) } name="note" maxlength="1000">{ b.Note }</textarea>
+											<p class="muted">Let the guest know yourself; their calendar file won't update.</p>
+											<button type="submit">Save</button>
+										</form>
+									</details>
+								}
 							</td>
 						</tr>
 					}
@@ -179,6 +202,21 @@ templ Admin(p AdminPage) {
 									<form method="post" action={ templ.SafeURL("/admin/invites/" + itoa64(i.ID) + "/revoke") } class="inline" onsubmit="return confirm('Revoke this invite? Existing bookings stay.')">
 										<button type="submit" class="danger small">Revoke</button>
 									</form>
+								}
+								if i.Editable {
+									<details class="small">
+										<summary>Edit</summary>
+										<form method="post" action={ templ.SafeURL("/admin/invites/" + itoa64(i.ID)) }>
+											<label for={ "label-" + itoa64(i.ID) }>Label</label>
+											<input id={ "label-" + itoa64(i.ID) } type="text" name="label" value={ i.RawLabel }/>
+											<label for={ "uses-" + itoa64(i.ID) }>Uses</label>
+											<input id={ "uses-" + itoa64(i.ID) } type="number" name="max_uses" min={ itoa(max(i.UsedCount, 1)) } value={ itoa(i.MaxUses) }/>
+											<label for={ "exp-" + itoa64(i.ID) }>Expires</label>
+											<input id={ "exp-" + itoa64(i.ID) } type="datetime-local" name="expires_at" value={ i.ExpiresInput }/>
+											<p class="muted">Durations, dates and location stay as shared.</p>
+											<button type="submit">Save</button>
+										</form>
+									</details>
 								}
 							</td>
 						</tr>

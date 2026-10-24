@@ -61,6 +61,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	}
 	mux.Handle("GET /admin/{$}", s.requireOwner(http.HandlerFunc(s.handleAdmin)))
 	mux.Handle("POST /admin/invites", s.requireOwner(http.HandlerFunc(s.handleCreateInvite)))
+	mux.Handle("POST /admin/invites/{id}", s.requireOwner(http.HandlerFunc(s.handleEditInvite)))
+	mux.Handle("POST /admin/bookings/{id}", s.requireOwner(http.HandlerFunc(s.handleEditBooking)))
 	mux.Handle("POST /admin/invites/{id}/revoke", s.requireOwner(http.HandlerFunc(s.handleRevokeInvite)))
 	mux.Handle("POST /admin/bookings/{id}/cancel", s.requireOwner(http.HandlerFunc(s.handleOwnerCancel)))
 	mux.Handle("POST /admin/feed", s.requireOwner(http.HandlerFunc(s.handleRotateFeed)))

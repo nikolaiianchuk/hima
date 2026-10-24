@@ -44,10 +44,12 @@ func durationOptions(checked []time.Duration) []views.DurationOption {
 }
 
 func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
-	s.renderAdmin(w, r, http.StatusOK, s.defaultForm(), "")
+	s.renderAdmin(w, r, http.StatusOK, s.defaultForm(), "", "")
 }
 
-func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, status int, form views.NewInviteForm, errMsg string) {
+// renderAdmin shows the admin page. formErr belongs to the new-Invite form,
+// editErr to an edit of an existing Invite or Booking.
+func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, status int, form views.NewInviteForm, formErr, editErr string) {
 	ctx := r.Context()
 	now := s.svc.Now()
 	loc := s.svc.Availability.Location
@@ -66,7 +68,8 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, status int,
 		OwnerName: s.cfg.Owner.Name,
 		TZ:        loc.String(),
 		CanLogout: s.cfg.Auth.Mode == config.AuthModePassword,
-		Error:     errMsg,
+		Error:     formErr,
+		EditError: editErr,
 		Form:      form,
 	}
 	if since, err := s.svc.FeedCreatedAt(ctx); err != nil {
@@ -97,14 +100,19 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, status int,
 		}
 		state := inv.State(now)
 		page.Invites = append(page.Invites, views.AdminInvite{
-			ID:        inv.ID,
-			Label:     orDefault(inv.Label, "(no label)"),
-			State:     string(state),
-			Uses:      fmt.Sprintf("%d / %d", inv.Uses, inv.MaxUses),
-			Expires:   dayLabel(inv.ExpiresAt.In(loc)) + " " + clockLabel(inv.ExpiresAt.In(loc)),
-			Durations: strings.Join(ds, ", "),
-			Location:  inv.Location,
-			Active:    state == store.InviteActive,
+			ID:           inv.ID,
+			Label:        orDefault(inv.Label, "(no label)"),
+			RawLabel:     inv.Label,
+			Editable:     state != store.InviteRevoked,
+			MaxUses:      inv.MaxUses,
+			UsedCount:    inv.Uses,
+			ExpiresInput: inv.ExpiresAt.In(loc).Format(datetimeLocal),
+			State:        string(state),
+			Uses:         fmt.Sprintf("%d / %d", inv.Uses, inv.MaxUses),
+			Expires:      dayLabel(inv.ExpiresAt.In(loc)) + " " + clockLabel(inv.ExpiresAt.In(loc)),
+			Durations:    strings.Join(ds, ", "),
+			Location:     inv.Location,
+			Active:       state == store.InviteActive,
 		})
 	}
 	for _, b := range bookings {
@@ -117,6 +125,7 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, status int,
 			Location:    b.Location,
 			Status:      ownerStatus(b, now),
 			Cancellable: !b.Cancelled() && now.Before(b.Start),
+			Editable:    !b.Cancelled() && now.Before(b.End),
 		})
 	}
 	s.render(w, r, status, views.Admin(page))
@@ -174,14 +183,14 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 		n.RangeEnd, err = parseDate(form.RangeEnd, loc, 1)
 	}
 	if err != nil {
-		s.renderAdmin(w, r, http.StatusUnprocessableEntity, form, "Dates must look like 2026-10-31.")
+		s.renderAdmin(w, r, http.StatusUnprocessableEntity, form, "Dates must look like 2026-10-31.", "")
 		return
 	}
 
 	inv, tok, err := s.svc.CreateInvite(r.Context(), n)
 	var inputErr *booking.InputError
 	if errors.As(err, &inputErr) {
-		s.renderAdmin(w, r, http.StatusUnprocessableEntity, form, inputErr.Msg)
+		s.renderAdmin(w, r, http.StatusUnprocessableEntity, form, inputErr.Msg, "")
 		return
 	}
 	if err != nil {
@@ -246,4 +255,54 @@ func orDefault(s, def string) string {
 		return def
 	}
 	return s
+}
+
+// datetimeLocal is the value format of <input type="datetime-local">.
+const datetimeLocal = "2006-01-02T15:04"
+
+func (s *Server) handleEditInvite(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.handleNotFound(w, r)
+		return
+	}
+	maxUses, _ := strconv.Atoi(r.PostFormValue("max_uses"))
+	expires, err := time.ParseInLocation(datetimeLocal, r.PostFormValue("expires_at"), s.svc.Availability.Location)
+	if err != nil {
+		s.renderAdmin(w, r, http.StatusUnprocessableEntity, s.defaultForm(), "", "Please give a valid expiry date and time.")
+		return
+	}
+	err = s.svc.EditInvite(r.Context(), id, booking.InviteEdit{Label: r.PostFormValue("label"), MaxUses: maxUses, ExpiresAt: expires})
+	var inputErr *booking.InputError
+	switch {
+	case errors.As(err, &inputErr):
+		s.renderAdmin(w, r, http.StatusUnprocessableEntity, s.defaultForm(), "", inputErr.Msg)
+		return
+	case err != nil:
+		s.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
+}
+
+func (s *Server) handleEditBooking(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.handleNotFound(w, r)
+		return
+	}
+	err = s.svc.EditBooking(r.Context(), id, r.PostFormValue("location"), r.PostFormValue("note"))
+	var inputErr *booking.InputError
+	switch {
+	case errors.As(err, &inputErr):
+		s.renderAdmin(w, r, http.StatusUnprocessableEntity, s.defaultForm(), "", inputErr.Msg)
+		return
+	case errors.Is(err, booking.ErrLocked):
+		s.renderAdmin(w, r, http.StatusConflict, s.defaultForm(), "", "That booking is cancelled or over and can't be changed.")
+		return
+	case err != nil:
+		s.fail(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/", http.StatusSeeOther)
 }
