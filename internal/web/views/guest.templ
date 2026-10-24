@@ -1,0 +1,219 @@
+package views
+
+type Choice struct {
+	Label  string
+	Href   string
+	Active bool
+}
+
+type SlotLink struct {
+	Time string
+	Href string
+}
+
+type SlotDay struct {
+	Label string
+	Slots []SlotLink
+	Busy  []string
+}
+
+// TZForm lets a Guest change the time zone times are shown in.
+type TZForm struct {
+	Current string
+	Choices []string
+	// Keep are query parameters to carry over when the zone changes.
+	Keep map[string]string
+}
+
+type SlotsPage struct {
+	Title     string
+	Intro     string
+	Location  string
+	Durations []Choice
+	Days      []SlotDay
+	TZ        TZForm
+	Error     string
+}
+
+templ Slots(p SlotsPage) {
+	@layout(p.Title) {
+		@detectTimezone()
+		<h1>{ p.Title }</h1>
+		if p.Intro != "" {
+			<p class="muted">{ p.Intro }</p>
+		}
+		if p.Location != "" {
+			<p class="small">📍 { p.Location }</p>
+		}
+		if p.Error != "" {
+			<p class="error">{ p.Error }</p>
+		}
+		if len(p.Durations) > 1 {
+			<div class="row" style="margin-top:1rem">
+				for _, d := range p.Durations {
+					<a class={ "pill", templ.KV("active", d.Active) } href={ templ.SafeURL(d.Href) }>{ d.Label }</a>
+				}
+			</div>
+		}
+		@tzForm(p.TZ)
+		if len(p.Days) == 0 {
+			<div class="card">
+				<p>No free times right now.</p>
+			</div>
+		}
+		for _, day := range p.Days {
+			<div class="day">{ day.Label }</div>
+			if len(day.Slots) > 0 {
+				<div class="slots">
+					for _, s := range day.Slots {
+						<a href={ templ.SafeURL(s.Href) }>{ s.Time }</a>
+					}
+				</div>
+			} else {
+				<p class="small muted">No free times.</p>
+			}
+			for _, b := range day.Busy {
+				<div class="busy">Busy { b }</div>
+			}
+		}
+	}
+}
+
+templ tzForm(f TZForm) {
+	<form method="get" class="row small muted" style="margin:1rem 0">
+		<span>Times shown in</span>
+		for k, v := range f.Keep {
+			<input type="hidden" name={ k } value={ v }/>
+		}
+		<select name="tz" onchange="this.form.submit()" style="width:auto">
+			for _, z := range f.Choices {
+				<option value={ z } selected?={ z == f.Current }>{ z }</option>
+			}
+		</select>
+		<noscript><button type="submit" class="secondary">Change</button></noscript>
+	</form>
+}
+
+type ConfirmPage struct {
+	Title     string
+	When      string
+	OwnerWhen string
+	Duration  string
+	Location  string
+	Action    string
+	Start     string
+	Minutes   string
+	TZ        string
+	// AskDetails is false when rescheduling: name and note are already known.
+	AskDetails bool
+	Name       string
+	Note       string
+	Error      string
+	BackHref   string
+	Submit     string
+}
+
+templ Confirm(p ConfirmPage) {
+	@layout(p.Title) {
+		<h1>{ p.Title }</h1>
+		<div class="card">
+			<p><strong>{ p.When }</strong></p>
+			if p.OwnerWhen != "" {
+				<p class="small muted">{ p.OwnerWhen }</p>
+			}
+			<p class="small">{ p.Duration }</p>
+			if p.Location != "" {
+				<p class="small">📍 { p.Location }</p>
+			}
+		</div>
+		if p.Error != "" {
+			<p class="error">{ p.Error }</p>
+		}
+		<form method="post" action={ templ.SafeURL(p.Action) }>
+			<input type="hidden" name="start" value={ p.Start }/>
+			<input type="hidden" name="d" value={ p.Minutes }/>
+			<input type="hidden" name="tz" value={ p.TZ }/>
+			if p.AskDetails {
+				<label for="name">Your name</label>
+				<input id="name" type="text" name="name" value={ p.Name } maxlength="100" required autofocus autocomplete="name"/>
+				<label for="note">What's it about? <span class="muted small">(optional)</span></label>
+				<textarea id="note" name="note" maxlength="1000">{ p.Note }</textarea>
+			}
+			<p class="row" style="margin-top:1rem">
+				<button type="submit">{ p.Submit }</button>
+				<a class="button secondary" href={ templ.SafeURL(p.BackHref) }>Pick another time</a>
+			</p>
+		</form>
+	}
+}
+
+type ManagePage struct {
+	JustBooked     bool
+	JustChanged    bool
+	Title          string
+	When           string
+	OwnerWhen      string
+	Duration       string
+	Location       string
+	Note           string
+	Status         string
+	Cancelled      bool
+	Changeable     bool
+	ManageURL      string
+	ICSHref        string
+	CancelAction   string
+	RescheduleHref string
+	TZ             string
+}
+
+templ Manage(p ManagePage) {
+	@layout(p.Title) {
+		@detectTimezone()
+		if p.JustBooked {
+			<h1>You're booked ✓</h1>
+		} else if p.JustChanged {
+			<h1>Done ✓</h1>
+		} else {
+			<h1>{ p.Title }</h1>
+		}
+		<div class="card">
+			<p><strong>{ p.When }</strong></p>
+			if p.OwnerWhen != "" {
+				<p class="small muted">{ p.OwnerWhen }</p>
+			}
+			<p class="small">{ p.Duration }</p>
+			if p.Location != "" {
+				<p class="small">📍 { p.Location }</p>
+			}
+			if p.Note != "" {
+				<p class="small muted">“{ p.Note }”</p>
+			}
+			<p class={ "small", templ.KV("error", p.Cancelled), templ.KV("ok", !p.Cancelled) }>{ p.Status }</p>
+		</div>
+		if !p.Cancelled {
+			<p><a class="button" href={ templ.SafeURL(p.ICSHref) }>Add to calendar (.ics)</a></p>
+		}
+		if p.JustBooked {
+			<div class="card">
+				<p><strong>Save this link</strong> to reschedule or cancel later. It's the only way back to this booking.</p>
+				@copyBox(p.ManageURL)
+			</div>
+		}
+		if p.Changeable {
+			<h2>Need to change it?</h2>
+			<div class="row">
+				<a class="button secondary" href={ templ.SafeURL(p.RescheduleHref) }>Reschedule</a>
+				<form method="post" action={ templ.SafeURL(p.CancelAction) } class="inline" onsubmit="return confirm('Cancel this booking?')">
+					<button type="submit" class="danger">Cancel booking</button>
+				</form>
+			</div>
+		}
+	}
+}
+
+templ copyBox(value string) {
+	<div class="link-box">
+		<input type="text" readonly value={ value } onclick="this.select()"/>
+		<button type="button" class="secondary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(() => { this.textContent = 'Copied' })">Copy</button>
+	</div>
+}

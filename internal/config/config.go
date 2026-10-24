@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -28,6 +29,7 @@ type Config struct {
 	Auth     Auth   `yaml:"auth"`
 
 	AvailabilityConfig AvailabilityConfig `yaml:"availability"`
+	InviteDefaults     InviteDefaults     `yaml:"invite_defaults"`
 	// Calendars are the Calendar sources whose events are Busy blocks.
 	Calendars []CalendarConfig `yaml:"calendars"`
 }
@@ -108,6 +110,7 @@ func (c *Config) applyDefaults() {
 	}
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
 	c.AvailabilityConfig.applyDefaults()
+	c.InviteDefaults.applyDefaults()
 }
 
 func (c *Config) Validate() error {
@@ -125,9 +128,44 @@ func (c *Config) Validate() error {
 	if _, err := c.Availability(); err != nil {
 		return err
 	}
+	if err := c.InviteDefaults.validate(); err != nil {
+		return err
+	}
 	for i, cal := range c.Calendars {
 		if !strings.HasPrefix(cal.URL, "https://") && !strings.HasPrefix(cal.URL, "http://") {
 			return fmt.Errorf("calendars[%d].url must be an http(s) URL (webcal:// links: replace webcal with https)", i)
+		}
+	}
+	return nil
+}
+
+// InviteDefaults pre-fill the admin's "new Invite" form.
+type InviteDefaults struct {
+	ExpiresInDays int             `yaml:"expires_in_days"`
+	MaxUses       int             `yaml:"max_uses"`
+	Durations     []time.Duration `yaml:"durations"`
+	Location      string          `yaml:"location"`
+}
+
+func (d *InviteDefaults) applyDefaults() {
+	if d.ExpiresInDays == 0 {
+		d.ExpiresInDays = 7
+	}
+	if d.MaxUses == 0 {
+		d.MaxUses = 1
+	}
+	if len(d.Durations) == 0 {
+		d.Durations = []time.Duration{30 * time.Minute}
+	}
+}
+
+func (d InviteDefaults) validate() error {
+	if d.ExpiresInDays < 0 || d.MaxUses < 0 {
+		return errors.New("invite_defaults: expires_in_days and max_uses must be positive")
+	}
+	for _, dur := range d.Durations {
+		if dur <= 0 || dur%time.Minute != 0 {
+			return fmt.Errorf("invite_defaults.durations: %v is not a whole number of minutes", dur)
 		}
 	}
 	return nil

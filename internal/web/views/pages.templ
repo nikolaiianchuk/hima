@@ -16,15 +16,10 @@ templ NotFound() {
 	}
 }
 
-templ AdminHome(ownerName string, canLogout bool) {
-	@layout("Admin") {
-		<h1>Hi, { ownerName } 👋</h1>
-		<p class="muted">Invites and Bookings will live here.</p>
-		if canLogout {
-			<form method="post" action="/admin/logout">
-				<button type="submit">Log out</button>
-			</form>
-		}
+templ Unavailable() {
+	@layout("Temporarily unavailable") {
+		<h1>Booking is temporarily unavailable</h1>
+		<p class="muted">The calendar couldn't be checked just now. Please try again in a little while.</p>
 	}
 }
 
@@ -32,11 +27,12 @@ templ Login(failed bool) {
 	@layout("Log in") {
 		<h1>Log in</h1>
 		if failed {
-			<p class="muted">Wrong password.</p>
+			<p class="error">Wrong password.</p>
 		}
 		<form method="post" action="/admin/login">
-			<input type="password" name="password" autocomplete="current-password" autofocus required/>
-			<button type="submit">Log in</button>
+			<label for="password">Password</label>
+			<input id="password" type="password" name="password" autocomplete="current-password" autofocus required/>
+			<p><button type="submit">Log in</button></p>
 		</form>
 	}
 }

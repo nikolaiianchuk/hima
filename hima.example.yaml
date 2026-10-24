@@ -42,6 +42,13 @@ availability:
   horizon_days: 30      # how far ahead Guests can book
   step: 30m             # spacing between Slot start times
 
+# Pre-filled values for the "new Invite" form.
+invite_defaults:
+  expires_in_days: 7
+  max_uses: 1
+  durations: [30m]        # offer several, e.g. [30m, 1h]
+  location: ""            # e.g. a Jitsi link or "Café Nicola"
+
 # Calendar sources: private ICS URLs. Everything in them counts as busy,
 # except events marked "free". (For webcal:// links, use https:// instead.)
 calendars:

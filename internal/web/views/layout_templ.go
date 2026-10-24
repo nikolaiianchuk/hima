@@ -29,20 +29,20 @@ func layout(title string) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"referrer\" content=\"no-referrer\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 9, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/views/layout.templ`, Line: 10, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " · hima</title><style>\n\t\t\t\t:root { color-scheme: light dark; --fg: #1d1d1f; --bg: #fafaf7; --muted: #6e6e73; --accent: #b4553a; }\n\t\t\t\t@media (prefers-color-scheme: dark) { :root { --fg: #f2f2ee; --bg: #161615; --muted: #9a9a95; --accent: #e08a6d; } }\n\t\t\t\tbody { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }\n\t\t\t\tmain { max-width: 36rem; margin: 0 auto; padding: 3rem 1rem; }\n\t\t\t\th1 { font-size: 1.5rem; margin: 0 0 1rem; }\n\t\t\t\tp.muted { color: var(--muted); }\n\t\t\t\tinput, button { font: inherit; padding: .5rem .75rem; }\n\t\t\t\tbutton { background: var(--accent); color: #fff; border: 0; border-radius: .375rem; cursor: pointer; }\n\t\t\t</style></head><body><main>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " · hima</title><style>\n\t\t\t\t:root { color-scheme: light dark; --fg: #1d1d1f; --bg: #fafaf7; --card: #fff; --line: #e4e2dc; --muted: #6e6e73; --accent: #b4553a; --accent-fg: #fff; --ok: #2f7d4f; --warn: #a33; }\n\t\t\t\t@media (prefers-color-scheme: dark) { :root { --fg: #f2f2ee; --bg: #161615; --card: #1f1f1d; --line: #34332f; --muted: #9a9a95; --accent: #e08a6d; --accent-fg: #1a1a1a; --ok: #6cc08f; --warn: #f08a8a; } }\n\t\t\t\t* { box-sizing: border-box; }\n\t\t\t\tbody { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }\n\t\t\t\tmain { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }\n\t\t\t\th1 { font-size: 1.5rem; margin: 0 0 .5rem; }\n\t\t\t\th2 { font-size: 1.1rem; margin: 2rem 0 .75rem; }\n\t\t\t\ta { color: var(--accent); }\n\t\t\t\tp { margin: .5rem 0; }\n\t\t\t\t.muted { color: var(--muted); }\n\t\t\t\t.small { font-size: .875rem; }\n\t\t\t\t.error { color: var(--warn); }\n\t\t\t\t.ok { color: var(--ok); }\n\t\t\t\t.card { background: var(--card); border: 1px solid var(--line); border-radius: .75rem; padding: 1rem 1.25rem; margin: 1rem 0; }\n\t\t\t\t.row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }\n\t\t\t\t.pill { display: inline-block; padding: .35rem .75rem; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; color: var(--fg); }\n\t\t\t\t.pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }\n\t\t\t\t.day { margin: 1.25rem 0 .5rem; font-weight: 600; }\n\t\t\t\t.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .5rem; }\n\t\t\t\t.slots a { text-align: center; padding: .5rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--card); text-decoration: none; color: var(--fg); font-variant-numeric: tabular-nums; }\n\t\t\t\t.slots a:hover { border-color: var(--accent); }\n\t\t\t\t.busy { color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }\n\t\t\t\tlabel { display: block; margin: .75rem 0 .25rem; font-weight: 500; }\n\t\t\t\tlabel.inline { display: inline-flex; gap: .35rem; align-items: center; font-weight: 400; margin: .25rem .75rem .25rem 0; }\n\t\t\t\tinput[type=text], input[type=number], input[type=date], input[type=password], textarea, select { font: inherit; width: 100%; padding: .5rem .65rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--card); color: var(--fg); }\n\t\t\t\ttextarea { min-height: 5rem; }\n\t\t\t\tbutton, .button { font: inherit; display: inline-block; padding: .55rem 1rem; background: var(--accent); color: var(--accent-fg); border: 0; border-radius: .5rem; cursor: pointer; text-decoration: none; }\n\t\t\t\tbutton.secondary, .button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }\n\t\t\t\tbutton.danger { background: transparent; color: var(--warn); border: 1px solid var(--line); }\n\t\t\t\tform.inline { display: inline; }\n\t\t\t\ttable { width: 100%; border-collapse: collapse; font-size: .9rem; }\n\t\t\t\ttd, th { text-align: left; padding: .5rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }\n\t\t\t\t.link-box { display: flex; gap: .5rem; } .link-box input { flex: 1; font-family: ui-monospace, monospace; font-size: .85rem; }\n\t\t\t\t.table-wrap { overflow-x: auto; }\n\t\t\t</style></head><body><main>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -51,6 +51,37 @@ func layout(title string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</main></body></html>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// detectTimezone reloads the page with the browser's time zone as ?tz= when
+// none is set, so Guests see times in their own zone.
+func detectTimezone() templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var3 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var3 == nil {
+			templ_7745c5c3_Var3 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<script>\n\t\t(function () {\n\t\t\tvar u = new URL(location.href);\n\t\t\tif (u.searchParams.has(\"tz\")) return;\n\t\t\tvar z = Intl.DateTimeFormat().resolvedOptions().timeZone;\n\t\t\tif (!z) return;\n\t\t\tu.searchParams.set(\"tz\", z);\n\t\t\tlocation.replace(u);\n\t\t})();\n\t</script>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

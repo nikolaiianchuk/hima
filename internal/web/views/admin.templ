@@ -1,0 +1,189 @@
+package views
+
+type AdminInvite struct {
+	ID        int64
+	Label     string
+	State     string
+	Uses      string
+	Expires   string
+	Durations string
+	Location  string
+	Active    bool
+}
+
+type AdminBooking struct {
+	ID          int64
+	When        string
+	GuestName   string
+	InviteLabel string
+	Note        string
+	Location    string
+	Status      string
+	Cancellable bool
+}
+
+type DurationOption struct {
+	Minutes int
+	Label   string
+	Checked bool
+}
+
+type NewInviteForm struct {
+	Label         string
+	Location      string
+	Durations     []DurationOption
+	MaxUses       int
+	ExpiresInDays int
+	RangeStart    string
+	RangeEnd      string
+	ShowBusy      bool
+}
+
+type AdminPage struct {
+	OwnerName string
+	TZ        string
+	CanLogout bool
+	Error     string
+	Form      NewInviteForm
+	Invites   []AdminInvite
+	Bookings  []AdminBooking
+	Warning   string
+}
+
+templ Admin(p AdminPage) {
+	@layout("Admin") {
+		<div class="row" style="justify-content:space-between">
+			<h1>Hi, { p.OwnerName } 👋</h1>
+			if p.CanLogout {
+				<form method="post" action="/admin/logout" class="inline">
+					<button type="submit" class="secondary">Log out</button>
+				</form>
+			}
+		</div>
+		if p.Warning != "" {
+			<p class="error">{ p.Warning }</p>
+		}
+		<h2>New invite</h2>
+		if p.Error != "" {
+			<p class="error">{ p.Error }</p>
+		}
+		<form method="post" action="/admin/invites" class="card">
+			<label for="label">Label <span class="muted small">(only you see this)</span></label>
+			<input id="label" type="text" name="label" value={ p.Form.Label } placeholder="for Alex"/>
+			<label>Durations</label>
+			<div>
+				for _, d := range p.Form.Durations {
+					<label class="inline"><input type="checkbox" name="durations" value={ itoa(d.Minutes) } checked?={ d.Checked }/> { d.Label }</label>
+				}
+			</div>
+			<div class="row" style="gap:1rem">
+				<div style="flex:1;min-width:8rem">
+					<label for="max_uses">Uses</label>
+					<input id="max_uses" type="number" name="max_uses" min="1" value={ itoa(p.Form.MaxUses) }/>
+				</div>
+				<div style="flex:1;min-width:8rem">
+					<label for="expires">Expires in (days)</label>
+					<input id="expires" type="number" name="expires_in_days" min="1" value={ itoa(p.Form.ExpiresInDays) }/>
+				</div>
+			</div>
+			<label for="location">Location</label>
+			<input id="location" type="text" name="location" value={ p.Form.Location } placeholder="Café, phone, or a video link"/>
+			<details style="margin-top:.75rem">
+				<summary class="small">Limit dates · show busy times</summary>
+				<div class="row" style="gap:1rem">
+					<div style="flex:1;min-width:8rem">
+						<label for="range_start">From <span class="muted small">({ p.TZ })</span></label>
+						<input id="range_start" type="date" name="range_start" value={ p.Form.RangeStart }/>
+					</div>
+					<div style="flex:1;min-width:8rem">
+						<label for="range_end">Until (inclusive)</label>
+						<input id="range_end" type="date" name="range_end" value={ p.Form.RangeEnd }/>
+					</div>
+				</div>
+				<label class="inline"><input type="checkbox" name="show_busy" value="1" checked?={ p.Form.ShowBusy }/> Show my busy times to the guest</label>
+			</details>
+			<p style="margin-top:1rem"><button type="submit">Create invite</button></p>
+		</form>
+		<h2>Bookings</h2>
+		if len(p.Bookings) == 0 {
+			<p class="muted">Nothing booked yet.</p>
+		} else {
+			<div class="table-wrap">
+				<table>
+					<tr><th>When</th><th>Guest</th><th>Status</th><th></th></tr>
+					for _, b := range p.Bookings {
+						<tr>
+							<td>{ b.When }</td>
+							<td>
+								{ b.GuestName }
+								if b.InviteLabel != "" {
+									<div class="small muted">{ b.InviteLabel }</div>
+								}
+								if b.Note != "" {
+									<div class="small muted">“{ b.Note }”</div>
+								}
+							</td>
+							<td class="small">{ b.Status }</td>
+							<td>
+								if b.Cancellable {
+									<form method="post" action={ templ.SafeURL("/admin/bookings/" + itoa64(b.ID) + "/cancel") } class="inline" onsubmit="return confirm('Cancel this booking? Let the guest know yourself.')">
+										<button type="submit" class="danger small">Cancel</button>
+									</form>
+								}
+							</td>
+						</tr>
+					}
+				</table>
+			</div>
+		}
+		<h2>Invites</h2>
+		if len(p.Invites) == 0 {
+			<p class="muted">No invites yet.</p>
+		} else {
+			<div class="table-wrap">
+				<table>
+					<tr><th>Label</th><th>State</th><th>Uses</th><th>Expires</th><th></th></tr>
+					for _, i := range p.Invites {
+						<tr>
+							<td>
+								{ i.Label }
+								<div class="small muted">{ i.Durations }</div>
+							</td>
+							<td class="small">{ i.State }</td>
+							<td class="small">{ i.Uses }</td>
+							<td class="small">{ i.Expires }</td>
+							<td>
+								if i.Active {
+									<form method="post" action={ templ.SafeURL("/admin/invites/" + itoa64(i.ID) + "/revoke") } class="inline" onsubmit="return confirm('Revoke this invite? Existing bookings stay.')">
+										<button type="submit" class="danger small">Revoke</button>
+									</form>
+								}
+							</td>
+						</tr>
+					}
+				</table>
+			</div>
+		}
+	}
+}
+
+type InviteCreatedPage struct {
+	URL     string
+	Label   string
+	Summary string
+}
+
+templ InviteCreated(p InviteCreatedPage) {
+	@layout("Invite created") {
+		<h1>Invite ready</h1>
+		if p.Label != "" {
+			<p class="muted">{ p.Label }</p>
+		}
+		<div class="card">
+			<p>Send this link to your guest. <strong>It's shown only once</strong>; revoke and create a new one if you lose it.</p>
+			@copyBox(p.URL)
+			<p class="small muted">{ p.Summary }</p>
+		</div>
+		<p><a href="/admin/">← Back</a></p>
+	}
+}

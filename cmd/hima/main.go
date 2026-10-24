@@ -22,6 +22,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
+	"github.com/nikolaiianchuk/hima/internal/booking"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/ics"
@@ -71,15 +72,15 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// Not yet read by the web layer; refreshing now surfaces bad feed URLs at startup.
 	cals := calsource.New(cfg.Sources(), ics.Options{Location: avail.Location, OwnerEmails: cfg.Owner.Emails}, nil)
 	go cals.Run(ctx, 5*time.Minute, func(err error) {
 		log.Warn("calendar source refresh failed", "err", err)
 	})
+	svc := &booking.Service{Store: st, Availability: avail, Calendars: cals, Now: time.Now}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           web.New(cfg, st, log),
+		Handler:           web.New(cfg, st, svc, log),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)
