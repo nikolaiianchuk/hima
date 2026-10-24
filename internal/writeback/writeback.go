@@ -9,16 +9,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/emersion/go-ical"
-
+	"github.com/nikolaiianchuk/hima/internal/ics"
 	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/store"
 )
 
-// Target is where Bookings are written (caldav.Writer).
+// Target is where Bookings are written: a CalDAV, Google or Microsoft
+// calendar.
 type Target interface {
-	Put(ctx context.Context, bookingID int64, cal *ical.Calendar) error
-	Delete(ctx context.Context, bookingID int64) error
+	Put(ctx context.Context, b store.Booking, ev ics.Event) error
+	// Delete removes the Booking's event; ev identifies it (UID).
+	Delete(ctx context.Context, b store.Booking, ev ics.Event) error
 }
 
 type job struct {
@@ -37,12 +38,15 @@ type Mirror struct {
 	Target Target
 	// Name describes the target calendar for the Owner.
 	Name string
-	// Build turns a Booking into the calendar object to write.
-	Build    func(store.Booking) *ical.Calendar
-	Notifier notify.Notifier
-	Log      *slog.Logger
-	Backoff  []time.Duration
-	Now      func() time.Time
+	// Build turns a Booking into the event to write.
+	Build func(store.Booking) ics.Event
+	// AfterWrite, if set, runs after each successful write, e.g. to re-read
+	// Calendar sources that would otherwise still show the old time.
+	AfterWrite func()
+	Notifier   notify.Notifier
+	Log        *slog.Logger
+	Backoff    []time.Duration
+	Now        func() time.Time
 
 	once sync.Once
 	jobs chan job
@@ -108,6 +112,8 @@ func (m *Mirror) run() {
 		m.mu.Unlock()
 		if err != nil {
 			m.report(j, err)
+		} else if m.AfterWrite != nil {
+			m.AfterWrite()
 		}
 	}
 }
@@ -120,9 +126,9 @@ func (m *Mirror) apply(j job) error {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		if j.remove {
-			err = m.Target.Delete(ctx, j.booking.ID)
+			err = m.Target.Delete(ctx, j.booking, m.Build(j.booking))
 		} else {
-			err = m.Target.Put(ctx, j.booking.ID, m.Build(j.booking))
+			err = m.Target.Put(ctx, j.booking, m.Build(j.booking))
 		}
 		cancel()
 		if err == nil {

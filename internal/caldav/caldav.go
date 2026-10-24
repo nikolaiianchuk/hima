@@ -16,6 +16,9 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
+
+	"github.com/nikolaiianchuk/hima/internal/ics"
+	"github.com/nikolaiianchuk/hima/internal/store"
 )
 
 // Account is one CalDAV login. Calendars are discovered from URL through the
@@ -213,6 +216,9 @@ type Writer struct {
 }
 
 func (w *Writer) objectPath(ctx context.Context, bookingID int64) (string, error) {
+	if w.Calendar == "" {
+		return "", fmt.Errorf("no write calendar configured")
+	}
 	cal, err := w.Account.Find(ctx, w.Calendar)
 	if err != nil {
 		return "", err
@@ -221,8 +227,8 @@ func (w *Writer) objectPath(ctx context.Context, bookingID int64) (string, error
 }
 
 // Put creates or replaces the Booking's event.
-func (w *Writer) Put(ctx context.Context, bookingID int64, cal *ical.Calendar) error {
-	p, err := w.objectPath(ctx, bookingID)
+func (w *Writer) Put(ctx context.Context, b store.Booking, ev ics.Event) error {
+	p, err := w.objectPath(ctx, b.ID)
 	if err != nil {
 		return err
 	}
@@ -230,13 +236,13 @@ func (w *Writer) Put(ctx context.Context, bookingID int64, cal *ical.Calendar) e
 	if err != nil {
 		return err
 	}
-	_, err = client.PutCalendarObject(ctx, p, cal)
+	_, err = client.PutCalendarObject(ctx, p, ics.Build("", ev))
 	return err
 }
 
 // Delete removes the Booking's event; a missing event is not an error.
-func (w *Writer) Delete(ctx context.Context, bookingID int64) error {
-	p, err := w.objectPath(ctx, bookingID)
+func (w *Writer) Delete(ctx context.Context, b store.Booking, _ ics.Event) error {
+	p, err := w.objectPath(ctx, b.ID)
 	if err != nil {
 		return err
 	}

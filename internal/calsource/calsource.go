@@ -32,11 +32,66 @@ type Fetcher interface {
 	Name() string
 }
 
-// Source is one Calendar source.
+// BusyFetcher reads a Calendar source that reports busy time directly, such
+// as Google's or Microsoft's free/busy APIs.
+type BusyFetcher interface {
+	FetchBusy(ctx context.Context) ([]schedule.Interval, error)
+	Name() string
+}
+
+// ErrNotConnected is returned by sources the Owner has configured but not
+// yet connected (OAuth). They count as current with no busy time, so Guests
+// still see Slots, and the admin shows the source as not connected.
+var ErrNotConnected = errors.New("not connected")
+
+// Source is one Calendar source: either Fetcher (calendar data) or Busy
+// (busy intervals) is set.
 type Source struct {
 	Fetcher Fetcher
-	// AllDayBlocks makes this source's all-day events Busy blocks.
+	Busy    BusyFetcher
+	// AllDayBlocks makes this source's all-day events Busy blocks. Busy
+	// sources decide that themselves.
 	AllDayBlocks bool
+}
+
+func (s Source) name() string {
+	if s.Busy != nil {
+		return s.Busy.Name()
+	}
+	return s.Fetcher.Name()
+}
+
+// snapshot is a source's latest good data.
+type snapshot interface {
+	Busy(from, to time.Time, allDayBlocks bool) []schedule.Interval
+}
+
+type intervals []schedule.Interval
+
+func (iv intervals) Busy(from, to time.Time, _ bool) []schedule.Interval {
+	window := schedule.Interval{Start: from, End: to}
+	var out []schedule.Interval
+	for _, i := range iv {
+		if i.Overlaps(window) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func (c *Cache) fetch(ctx context.Context, src Source) (snapshot, error) {
+	if src.Busy != nil {
+		busy, err := src.Busy.FetchBusy(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return intervals(busy), nil
+	}
+	cals, err := src.Fetcher.Fetch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ics.ParseCalendars(cals, c.opts), nil
 }
 
 // ICSFeed is a Calendar source published as an iCalendar URL.
@@ -73,7 +128,7 @@ func (f *ICSFeed) Fetch(ctx context.Context) ([]*ical.Calendar, error) {
 }
 
 type entry struct {
-	cal       *ics.Calendar
+	cal       snapshot
 	fetchedAt time.Time // last successful fetch
 	err       error     // last fetch error, nil after a success
 }
@@ -112,16 +167,18 @@ func (c *Cache) Refresh(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			cals, err := src.Fetcher.Fetch(ctx)
+			snap, err := c.fetch(ctx, src)
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			if err != nil {
+			switch {
+			case errors.Is(err, ErrNotConnected):
+				c.entries[i] = entry{cal: intervals(nil), fetchedAt: c.now(), err: err}
+			case err != nil:
 				c.entries[i].err = err
-				errs[i] = fmt.Errorf("%s: %w", src.Fetcher.Name(), err)
-				return
+				errs[i] = fmt.Errorf("%s: %w", src.name(), err)
+			default:
+				c.entries[i] = entry{cal: snap, fetchedAt: c.now()}
 			}
-			cal := ics.ParseCalendars(cals, c.opts)
-			c.entries[i] = entry{cal: cal, fetchedAt: c.now()}
 		}()
 	}
 	wg.Wait()
@@ -193,7 +250,7 @@ func (c *Cache) Status() []SourceStatus {
 	for i, src := range c.sources {
 		e := c.entries[i]
 		out[i] = SourceStatus{
-			Name:         src.Fetcher.Name(),
+			Name:         src.name(),
 			AllDayBlocks: src.AllDayBlocks,
 			LastSuccess:  e.fetchedAt,
 			LastError:    e.err,

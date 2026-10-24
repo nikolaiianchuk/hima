@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emersion/go-ical"
-
+	"github.com/nikolaiianchuk/hima/internal/ics"
 	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/store"
 )
@@ -21,12 +20,12 @@ type fakeTarget struct {
 	failures int
 }
 
-func (f *fakeTarget) Put(_ context.Context, id int64, _ *ical.Calendar) error {
-	return f.record("put", id)
+func (f *fakeTarget) Put(_ context.Context, b store.Booking, _ ics.Event) error {
+	return f.record("put", b.ID)
 }
 
-func (f *fakeTarget) Delete(_ context.Context, id int64) error {
-	return f.record("delete", id)
+func (f *fakeTarget) Delete(_ context.Context, b store.Booking, _ ics.Event) error {
+	return f.record("delete", b.ID)
 }
 
 func (f *fakeTarget) record(op string, id int64) error {
@@ -48,7 +47,7 @@ func newMirror(t *testing.T, target *fakeTarget, n notify.Notifier) *Mirror {
 	return &Mirror{
 		Target:   target,
 		Name:     "Personal (caldav.example.com)",
-		Build:    func(store.Booking) *ical.Calendar { return ical.NewCalendar() },
+		Build:    func(store.Booking) ics.Event { return ics.Event{} },
 		Notifier: n,
 		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Backoff:  []time.Duration{time.Millisecond},
@@ -58,6 +57,8 @@ func newMirror(t *testing.T, target *fakeTarget, n notify.Notifier) *Mirror {
 func TestAppliesInOrderWithRetry(t *testing.T) {
 	target := &fakeTarget{failures: 1}
 	m := newMirror(t, target, nil)
+	var refreshed int
+	m.AfterWrite = func() { refreshed++ }
 	b := store.Booking{ID: 1, GuestName: "Alex"}
 	m.Upsert(b)
 	m.Upsert(b)
@@ -65,6 +66,9 @@ func TestAppliesInOrderWithRetry(t *testing.T) {
 	m.Close(context.Background())
 	if got := target.log; len(got) != 3 || got[0] != "put" || got[2] != "delete" {
 		t.Errorf("log = %v", got)
+	}
+	if refreshed != 3 {
+		t.Errorf("AfterWrite ran %d times, want 3", refreshed)
 	}
 	if st := m.Status(); st.LastError != nil || st.LastSuccess.IsZero() {
 		t.Errorf("status %+v", st)

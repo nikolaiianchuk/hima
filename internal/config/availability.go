@@ -8,7 +8,9 @@ import (
 
 	"github.com/nikolaiianchuk/hima/internal/caldav"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
+	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
+	"github.com/nikolaiianchuk/hima/internal/store"
 )
 
 // AvailabilityConfig is the YAML form of schedule.Availability.
@@ -105,6 +107,30 @@ func (c *Config) Sources(acc *caldav.Account, horizon time.Duration) []calsource
 			Fetcher:      &caldav.Source{Account: acc, Calendars: c.CalDAV.Read, Horizon: horizon},
 			AllDayBlocks: c.CalDAV.AllDayBlocks,
 		})
+	}
+	return out
+}
+
+// OAuthProviders returns the configured Google and Microsoft connections.
+func (c *Config) OAuthProviders(st *store.Store) (google, microsoft *oauthcal.Provider) {
+	redirect := func(id string) string { return c.BaseURL + "/admin/oauth/" + id + "/callback" }
+	if g := c.Google; g.ClientID != "" {
+		google = oauthcal.NewGoogle(g.ClientID, g.ClientSecret, redirect("google"), st, g.Write != "")
+	}
+	if m := c.Microsoft; m.ClientID != "" {
+		microsoft = oauthcal.NewMicrosoft(m.ClientID, m.ClientSecret, m.Tenant, redirect("microsoft"), st, m.Write)
+	}
+	return google, microsoft
+}
+
+// OAuthSources returns busy sources for connected providers that read.
+func (c *Config) OAuthSources(google, microsoft *oauthcal.Provider, horizon time.Duration) []calsource.Source {
+	var out []calsource.Source
+	if google != nil && (c.Google.Read == nil || len(c.Google.Read) > 0) {
+		out = append(out, calsource.Source{Busy: &oauthcal.GoogleBusy{P: google, Calendars: c.Google.Read, Horizon: horizon}})
+	}
+	if microsoft != nil && (c.Microsoft.Read == nil || *c.Microsoft.Read) {
+		out = append(out, calsource.Source{Busy: &oauthcal.MicrosoftBusy{P: microsoft, Horizon: horizon}})
 	}
 	return out
 }

@@ -13,6 +13,9 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
+
+	"github.com/nikolaiianchuk/hima/internal/ics"
+	"github.com/nikolaiianchuk/hima/internal/store"
 )
 
 // memBackend is a tiny in-memory CalDAV server: one user, two calendars.
@@ -187,7 +190,9 @@ func TestWriterPutAndDelete(t *testing.T) {
 	be, acc := newServer(t)
 	w := &Writer{Account: acc, Calendar: "Personal"}
 	ctx := context.Background()
-	if err := w.Put(ctx, 7, event("booking-7@hima.example.com", "20261026T110000Z", "20261026T113000Z")); err != nil {
+	b := store.Booking{ID: 7}
+	ev := ics.Event{UID: "booking-7@hima.example.com", Start: time.Date(2026, 10, 26, 11, 0, 0, 0, time.UTC), End: time.Date(2026, 10, 26, 11, 30, 0, 0, time.UTC), Summary: "Alex", Stamp: now()}
+	if err := w.Put(ctx, b, ev); err != nil {
 		t.Fatal(err)
 	}
 	const path = "/dav/me/cal/personal/hima-booking-7.ics"
@@ -195,7 +200,8 @@ func TestWriterPutAndDelete(t *testing.T) {
 		t.Fatal("event not written")
 	}
 	// Overwrite on reschedule.
-	if err := w.Put(ctx, 7, event("booking-7@hima.example.com", "20261027T110000Z", "20261027T113000Z")); err != nil {
+	ev.Start, ev.End = ev.Start.AddDate(0, 0, 1), ev.End.AddDate(0, 0, 1)
+	if err := w.Put(ctx, b, ev); err != nil {
 		t.Fatal(err)
 	}
 	var buf bytes.Buffer
@@ -203,13 +209,13 @@ func TestWriterPutAndDelete(t *testing.T) {
 	if !strings.Contains(buf.String(), "DTSTART:20261027T110000Z") {
 		t.Errorf("not overwritten:\n%s", buf.String())
 	}
-	if err := w.Delete(ctx, 7); err != nil {
+	if err := w.Delete(ctx, b, ev); err != nil {
 		t.Fatal(err)
 	}
 	if be.has(path) {
 		t.Error("event not deleted")
 	}
-	if err := w.Delete(ctx, 7); err != nil {
+	if err := w.Delete(ctx, b, ev); err != nil {
 		t.Errorf("deleting a missing event: %v", err)
 	}
 }

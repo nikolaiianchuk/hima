@@ -668,13 +668,32 @@ func perDay(n int) string {
 
 func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {
 	now, loc := s.svc.Now(), s.ownerLoc()
-	p := views.SourcesPage{AdminFrame: s.frame("sources")}
+	q := r.URL.Query()
+	p := views.SourcesPage{AdminFrame: s.frame("sources"), Error: q.Get("error")}
+	switch {
+	case q.Get("connected") != "":
+		p.Notice = q.Get("connected") + " is connected."
+	case q.Get("disconnected") != "":
+		p.Notice = q.Get("disconnected") + " is disconnected. Also remove hima's access in your account's security settings."
+	}
+	for _, prov := range s.OAuth {
+		account, err := prov.Account(r.Context())
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		p.Accounts = append(p.Accounts, views.AccountRow{ID: prov.ID, Title: prov.Title, Account: account, RedirectURI: prov.OAuth.RedirectURL})
+	}
 	for _, st := range s.sourceStatus() {
 		row := views.SourceRow{Name: st.Name, AllDay: "Ignored"}
 		if st.AllDayBlocks {
 			row.AllDay = "Block the whole day"
 		}
 		switch {
+		case errors.Is(st.LastError, calsource.ErrNotConnected):
+			row.State, row.PillClass, row.Checked = "Not connected", "pill-warn", "Connect the account below to read it"
+			p.Sources = append(p.Sources, row)
+			continue
 		case st.LastSuccess.IsZero():
 			row.State, row.PillClass, row.Checked = "Not read yet", "pill-warn", "Never"
 		case st.Current:

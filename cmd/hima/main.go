@@ -25,14 +25,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
-	"github.com/emersion/go-ical"
-
 	"github.com/nikolaiianchuk/hima/internal/booking"
 	"github.com/nikolaiianchuk/hima/internal/caldav"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/ics"
 	"github.com/nikolaiianchuk/hima/internal/notify"
+	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web"
 	"github.com/nikolaiianchuk/hima/internal/writeback"
@@ -104,7 +103,9 @@ func run(log *slog.Logger) error {
 	}
 
 	acc := cfg.CalDAVAccount()
-	cals := calsource.New(cfg.Sources(acc, avail.Horizon), ics.Options{
+	google, microsoft := cfg.OAuthProviders(st)
+	sources := append(cfg.Sources(acc, avail.Horizon), cfg.OAuthSources(google, microsoft, avail.Horizon)...)
+	cals := calsource.New(sources, ics.Options{
 		Location:        avail.Location,
 		OwnerEmails:     cfg.Owner.Emails,
 		IgnoreUIDDomain: uidDomain(cfg.BaseURL),
@@ -114,17 +115,12 @@ func run(log *slog.Logger) error {
 		Store: st, Availability: avail, Calendars: cals, Now: time.Now, Notifier: notifier,
 		OwnerName: cfg.Owner.Name, UIDDomain: uidDomain(cfg.BaseURL),
 	}
-	var mirror *writeback.Mirror
-	if acc != nil && cfg.CalDAV.Write != "" {
-		mirror = &writeback.Mirror{
-			Target:   &caldav.Writer{Account: acc, Calendar: cfg.CalDAV.Write},
-			Name:     cfg.CalDAV.Write + " (" + acc.Host() + ")",
-			Build:    func(b store.Booking) *ical.Calendar { return ics.Build("", svc.OwnerEvent(b)) },
-			Notifier: notifier,
-			Log:      log,
-			Backoff:  []time.Duration{5 * time.Second, 30 * time.Second, 2 * time.Minute},
-		}
-		svc.Mirror = mirror
+	// At most one write-back target; config.Validate enforces it.
+	var target writeback.Target
+	var targetName string
+	switch {
+	case acc != nil && cfg.CalDAV.Write != "":
+		target, targetName = &caldav.Writer{Account: acc, Calendar: cfg.CalDAV.Write}, cfg.CalDAV.Write+" ("+acc.Host()+")"
 		go func() {
 			checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			defer cancel()
@@ -132,13 +128,36 @@ func run(log *slog.Logger) error {
 				log.Warn("caldav write calendar not usable", "err", err)
 			}
 		}()
+	case google != nil && cfg.Google.Write != "":
+		target, targetName = &oauthcal.GoogleWriter{P: google, Calendar: cfg.Google.Write}, "Google Calendar ("+cfg.Google.Write+")"
+	case microsoft != nil && cfg.Microsoft.Write:
+		target, targetName = &oauthcal.MicrosoftWriter{P: microsoft}, "Microsoft 365 calendar"
+	}
+	var mirror *writeback.Mirror
+	if target != nil {
+		mirror = &writeback.Mirror{
+			Target:     target,
+			Name:       targetName,
+			Build:      svc.OwnerEvent,
+			AfterWrite: func() { go cals.Refresh(ctx) },
+			Notifier:   notifier,
+			Log:        log,
+			Backoff:    []time.Duration{5 * time.Second, 30 * time.Second, 2 * time.Minute},
+		}
+		svc.Mirror = mirror
+	}
+	handler := web.New(cfg, st, svc, log)
+	for _, p := range []*oauthcal.Provider{google, microsoft} {
+		if p != nil {
+			handler.OAuth = append(handler.OAuth, p)
+		}
 	}
 
 	go purgeDaily(ctx, log, st, time.Duration(cfg.RetentionDays)*24*time.Hour)
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           web.New(cfg, st, svc, log),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	errc := make(chan error, 1)

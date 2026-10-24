@@ -16,11 +16,13 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/oauth2"
 
 	"github.com/nikolaiianchuk/hima/internal/booking"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/notify"
+	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
@@ -663,4 +665,69 @@ func TestWriteBackShownInAdmin(t *testing.T) {
 	mustContain(t, body, "Bookings are written to Personal (dav.example.com)", "Last write failed", "403 Forbidden")
 	_, body, _ = ts.get(t, "/admin/bookings")
 	mustContain(t, body, "already written to Personal (dav.example.com)")
+}
+
+func TestOAuthConnectFlow(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	srv := ts.Config.Handler.(*Server)
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"access_token":"at","refresh_token":"rt","token_type":"Bearer","expires_in":3600}`)
+		case "/oauth2/v2/userinfo":
+			io.WriteString(w, `{"email":"me@gmail.com"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer fake.Close()
+	p := oauthcal.NewGoogle("id", "secret", ts.URL+"/admin/oauth/google/callback", srv.store, false)
+	p.OAuth.Endpoint = oauth2.Endpoint{AuthURL: fake.URL + "/auth", TokenURL: fake.URL + "/token", AuthStyle: oauth2.AuthStyleInParams}
+	p.APIBase = fake.URL
+	srv.OAuth = []*oauthcal.Provider{p}
+
+	_, body, _ := ts.get(t, "/admin/sources")
+	mustContain(t, body, "Connect Google Calendar", "/admin/oauth/google/callback", "Not connected")
+
+	status, _, h := ts.get(t, "/admin/oauth/google/connect")
+	loc, _ := url.Parse(h.Get("Location"))
+	if status != http.StatusFound || !strings.HasPrefix(loc.String(), fake.URL+"/auth") {
+		t.Fatalf("connect: %d %s", status, loc)
+	}
+	state := loc.Query().Get("state")
+	var cookie *http.Cookie
+	for _, c := range (&http.Response{Header: h}).Cookies() {
+		if c.Name == oauthStateCookie {
+			cookie = c
+		}
+	}
+	callback := func(state string, withCookie bool) string {
+		req, _ := http.NewRequest("GET", ts.URL+"/admin/oauth/google/callback?code=c&state="+state, nil)
+		if withCookie {
+			req.AddCookie(cookie)
+		}
+		resp, err := ts.c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.Header.Get("Location")
+	}
+	if l := callback("forged", true); !strings.Contains(l, "error=") {
+		t.Errorf("forged state accepted: %s", l)
+	}
+	if l := callback(state, false); !strings.Contains(l, "error=") {
+		t.Errorf("missing cookie accepted: %s", l)
+	}
+	l := callback(state, true)
+	if !strings.Contains(l, "connected=") {
+		t.Fatalf("callback: %s", l)
+	}
+	_, body, _ = ts.get(t, l)
+	mustContain(t, body, "Google Calendar is connected.", "me@gmail.com", "Disconnect")
+
+	ts.post(t, "/admin/oauth/google/disconnect", nil)
+	_, body, _ = ts.get(t, "/admin/sources")
+	mustContain(t, body, "Connect Google Calendar")
 }

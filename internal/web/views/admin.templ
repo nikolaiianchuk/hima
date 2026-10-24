@@ -603,15 +603,54 @@ type WriteBackRow struct {
 	Error     string
 }
 
+type AccountRow struct {
+	ID          string
+	Title       string
+	Account     string
+	RedirectURI string
+}
+
 type SourcesPage struct {
 	AdminFrame
 	Sources   []SourceRow
 	WriteBack *WriteBackRow
+	Accounts  []AccountRow
+	Notice    string
+	Error     string
 }
 
 templ Sources(p SourcesPage) {
 	@adminLayout("Calendar sources", p.AdminFrame) {
 		<h1 class="a-title">Calendar sources</h1>
+		if p.Notice != "" {
+			<p class="notice" role="status">{ p.Notice }</p>
+		}
+		if p.Error != "" {
+			<p class="alert alert-danger" role="alert">{ p.Error }</p>
+		}
+		if len(p.Accounts) > 0 {
+			<h2 class="group-title">Connected accounts</h2>
+			for _, a := range p.Accounts {
+				<section class="card" style="gap: 12px">
+					<div class="row gap-12" style="justify-content: space-between">
+						<h2 style="font-size: 16px">{ a.Title }</h2>
+						if a.Account != "" {
+							<span class="pill pill-accent">{ a.Account }</span>
+						} else {
+							<span class="pill pill-warn">Not connected</span>
+						}
+					</div>
+					if a.Account != "" {
+						<form method="post" action={ templ.SafeURL("/admin/oauth/" + a.ID + "/disconnect") } onsubmit="return confirm('Disconnect? Also remove hima\'s access in your account settings.')">
+							<button type="submit" class="btn btn-plain">Disconnect</button>
+						</form>
+					} else {
+						<div><a class="btn" href={ templ.SafeURL("/admin/oauth/" + a.ID + "/connect") }>Connect { a.Title }</a></div>
+					}
+					<p class="hint">Redirect URI to register with your OAuth app: <span class="mono">{ a.RedirectURI }</span></p>
+				</section>
+			}
+		}
 		if len(p.Sources) == 0 {
 			<div class="card">
 				<p class="muted">No calendar sources. Every hour of your Availability is offered as free.</p>

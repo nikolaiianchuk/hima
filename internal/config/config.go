@@ -39,6 +39,9 @@ type Config struct {
 	// CalDAV is an optional account to read calendars from and write
 	// Bookings to.
 	CalDAV CalDAVConfig `yaml:"caldav"`
+	// Google and Microsoft connect through OAuth apps the Owner registers.
+	Google    GoogleConfig    `yaml:"google"`
+	Microsoft MicrosoftConfig `yaml:"microsoft"`
 }
 
 type Owner struct {
@@ -114,6 +117,11 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.CalDAV.Password, "HIMA_CALDAV_PASSWORD")
 	set(&c.CalDAV.PasswordFile, "HIMA_CALDAV_PASSWORD_FILE")
 	set(&c.CalDAV.Write, "HIMA_CALDAV_WRITE")
+	set(&c.Google.ClientID, "HIMA_GOOGLE_CLIENT_ID")
+	set(&c.Google.ClientSecret, "HIMA_GOOGLE_CLIENT_SECRET")
+	set(&c.Microsoft.ClientID, "HIMA_MICROSOFT_CLIENT_ID")
+	set(&c.Microsoft.ClientSecret, "HIMA_MICROSOFT_CLIENT_SECRET")
+	set(&c.Microsoft.Tenant, "HIMA_MICROSOFT_TENANT")
 	if v := getenv("HIMA_NTFY_ATTACH_ICS"); v != "" {
 		c.Notifications.Ntfy.AttachICS = v == "true" || v == "1"
 	}
@@ -175,6 +183,24 @@ func (c *Config) Validate() error {
 		if dav.Username == "" || dav.Password == "" {
 			return errors.New("caldav needs username and password (or password_file); use an app password where your provider offers one")
 		}
+	}
+	if (c.Google.ClientID != "" || c.Microsoft.ClientID != "") && !strings.HasPrefix(c.BaseURL, "http") {
+		return errors.New("google and microsoft need base_url: the OAuth redirect URI is built from it")
+	}
+	if c.Google.ClientID != "" && c.Google.ClientSecret == "" {
+		return errors.New("google.client_secret is required")
+	}
+	if c.Microsoft.ClientID != "" && c.Microsoft.ClientSecret == "" {
+		return errors.New("microsoft.client_secret is required")
+	}
+	writers := 0
+	for _, on := range []bool{c.CalDAV.URL != "" && c.CalDAV.Write != "", c.Google.ClientID != "" && c.Google.Write != "", c.Microsoft.ClientID != "" && c.Microsoft.Write} {
+		if on {
+			writers++
+		}
+	}
+	if writers > 1 {
+		return errors.New("Bookings can be written to one calendar only: set write on just one of caldav, google and microsoft")
 	}
 	for i, cal := range c.Calendars {
 		if !strings.HasPrefix(cal.URL, "https://") && !strings.HasPrefix(cal.URL, "http://") {
@@ -242,4 +268,26 @@ type CalDAVConfig struct {
 	AllDayBlocks bool     `yaml:"all_day_blocks"`
 	// Write names the calendar Bookings are written to; empty disables it.
 	Write string `yaml:"write"`
+}
+
+type GoogleConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	// Read lists calendar IDs used as Calendar sources. Omitted reads the
+	// primary calendar; an empty list reads none.
+	Read []string `yaml:"read"`
+	// Write is the calendar ID Bookings are written to ("primary" for the
+	// main one); empty disables it.
+	Write string `yaml:"write"`
+}
+
+type MicrosoftConfig struct {
+	ClientID     string `yaml:"client_id"`
+	ClientSecret string `yaml:"client_secret"`
+	// Tenant restricts sign-in to one directory; default "common".
+	Tenant string `yaml:"tenant"`
+	// Read uses the mailbox's free/busy as a Calendar source (default true).
+	Read *bool `yaml:"read"`
+	// Write puts Bookings in the default calendar.
+	Write bool `yaml:"write"`
 }

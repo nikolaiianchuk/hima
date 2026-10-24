@@ -20,6 +20,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/booking"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
+	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web/views"
@@ -46,6 +47,9 @@ type Server struct {
 
 	mu     sync.RWMutex
 	accent string
+
+	// OAuth are the configured Google / Microsoft connections, set by main.
+	OAuth []*oauthcal.Provider
 
 	// Abuse limits; see limits.go.
 	bookPerIP     *ratelimit.Limiter
@@ -155,6 +159,9 @@ func (s *Server) routes(mux *http.ServeMux) {
 	admin("GET /admin/activity", s.handleActivity)
 	admin("GET /admin/settings", s.handleSettings)
 	admin("POST /admin/settings", s.handleSaveSettings)
+	admin("GET /admin/oauth/{provider}/connect", s.handleOAuthConnect)
+	admin("GET /admin/oauth/{provider}/callback", s.handleOAuthCallback)
+	admin("POST /admin/oauth/{provider}/disconnect", s.handleOAuthDisconnect)
 	mux.Handle("GET /{$}", http.RedirectHandler("/admin/", http.StatusFound))
 
 	mux.HandleFunc("/", s.handleNotFound)

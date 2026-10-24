@@ -28,6 +28,9 @@ func TestLoad(t *testing.T) {
 		{name: "retention too short", yaml: "auth: {mode: proxy}\nretention_days: 7", wantErr: true},
 		{name: "caldav without password", yaml: "auth: {mode: proxy}\ncaldav: {url: 'https://dav.example.com', username: me}", wantErr: true},
 		{name: "caldav ok", yaml: "auth: {mode: proxy}\ncaldav: {url: 'https://dav.example.com', username: me, password: x}", wantListen: "127.0.0.1:8080"},
+		{name: "oauth needs base_url", yaml: "auth: {mode: proxy}\ngoogle: {client_id: a, client_secret: b}", wantErr: true},
+		{name: "one write target", yaml: "auth: {mode: proxy}\nbase_url: https://h.test\ngoogle: {client_id: a, client_secret: b, write: primary}\nmicrosoft: {client_id: a, client_secret: b, write: true}", wantErr: true},
+		{name: "google ok", yaml: "auth: {mode: proxy}\nbase_url: https://h.test\ngoogle: {client_id: a, client_secret: b, write: primary}", wantListen: "127.0.0.1:8080"},
 		{name: "env overrides file", yaml: "auth: {mode: password}", env: map[string]string{"HIMA_AUTH_MODE": "proxy"}, wantListen: "127.0.0.1:8080"},
 	}
 	for _, tt := range tests {

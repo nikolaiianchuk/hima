@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nikolaiianchuk/hima/internal/ics"
+	"github.com/nikolaiianchuk/hima/internal/schedule"
 )
 
 const feed = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\n" +
@@ -130,6 +131,31 @@ func TestStatus(t *testing.T) {
 	c.Refresh(context.Background())
 	st := c.Status()[0]
 	if !st.Current || st.LastError == nil || !st.LastSuccess.Equal(now) || !st.AllDayBlocks || strings.Contains(st.Name, "secret") {
+		t.Errorf("status %+v", st)
+	}
+}
+
+type busySource struct {
+	busy []schedule.Interval
+	err  error
+}
+
+func (b *busySource) FetchBusy(context.Context) ([]schedule.Interval, error) { return b.busy, b.err }
+func (b *busySource) Name() string                                           { return "Google Calendar" }
+
+func TestBusySources(t *testing.T) {
+	busy := []schedule.Interval{{Start: from.Add(time.Hour), End: from.Add(2 * time.Hour)}, {Start: to.Add(time.Hour), End: to.Add(2 * time.Hour)}}
+	notConnected := &busySource{err: ErrNotConnected}
+	c := New([]Source{{Busy: &busySource{busy: busy}}, {Busy: notConnected}}, ics.Options{Location: time.UTC})
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("not-connected must not be a refresh error: %v", err)
+	}
+	got, err := c.Busy(from, to)
+	if err != nil || len(got) != 1 {
+		t.Fatalf("busy = %v, %v; want the one interval inside the window", got, err)
+	}
+	st := c.Status()[1]
+	if !st.Current || !errors.Is(st.LastError, ErrNotConnected) || st.Name != "Google Calendar" {
 		t.Errorf("status %+v", st)
 	}
 }
