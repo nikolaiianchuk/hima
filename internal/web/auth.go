@@ -56,6 +56,10 @@ func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.loginPerIP.Allow(clientIP(r)) {
+		s.render(w, r, http.StatusTooManyRequests, views.TooMany(s.currentAccent()))
+		return
+	}
 	pw := r.PostFormValue("password")
 	if bcrypt.CompareHashAndPassword([]byte(s.cfg.Auth.PasswordHash), []byte(pw)) != nil {
 		s.render(w, r, http.StatusUnauthorized, views.Login(true, s.currentAccent()))

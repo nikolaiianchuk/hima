@@ -13,12 +13,14 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/a-h/templ"
 
 	"github.com/nikolaiianchuk/hima/internal/booking"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
+	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web/views"
 )
@@ -44,10 +46,20 @@ type Server struct {
 
 	mu     sync.RWMutex
 	accent string
+
+	// Abuse limits; see limits.go.
+	bookPerIP     *ratelimit.Limiter
+	bookPerInvite *ratelimit.Limiter
+	loginPerIP    *ratelimit.Limiter
 }
 
 func New(cfg *config.Config, st *store.Store, svc *booking.Service, log *slog.Logger) *Server {
-	s := &Server{cfg: cfg, store: st, svc: svc, log: log, accent: DefaultAccent}
+	s := &Server{
+		cfg: cfg, store: st, svc: svc, log: log, accent: DefaultAccent,
+		bookPerIP:     ratelimit.New(10, 6*time.Minute),
+		bookPerInvite: ratelimit.New(20, 3*time.Minute),
+		loginPerIP:    ratelimit.New(10, 90*time.Second),
+	}
 	if v, err := st.Setting(context.Background(), store.SettingAccent); err == nil && validAccent(v) {
 		s.accent = v
 	}

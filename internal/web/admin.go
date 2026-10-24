@@ -642,8 +642,16 @@ func (s *Server) handleAvailability(w http.ResponseWriter, r *http.Request) {
 		{Key: "Minimum notice", Value: none(a.MinNotice)},
 		{Key: "Book ahead", Value: fmt.Sprintf("%d days", int(math.Round(a.Horizon.Hours()/24)))},
 		{Key: "Start times every", Value: durationLabel(a.Step)},
+		{Key: "Bookings per day", Value: perDay(a.MaxPerDay)},
 	}
 	s.render(w, r, http.StatusOK, views.Availability(p))
+}
+
+func perDay(n int) string {
+	if n <= 0 {
+		return "No limit"
+	}
+	return fmt.Sprintf("At most %d", n)
 }
 
 func (s *Server) handleSources(w http.ResponseWriter, r *http.Request) {

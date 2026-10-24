@@ -14,7 +14,16 @@ var (
 	ErrInviteUnavailable = errors.New("invite is no longer active")
 	// ErrSlotTaken means another Booking (plus buffer) overlaps the time.
 	ErrSlotTaken = errors.New("slot is already taken")
+	// ErrDayFull means the day already has its maximum of Bookings.
+	ErrDayFull = errors.New("day is fully booked")
 )
+
+// DayCap limits live Bookings starting in [Start, End) to Max; a zero Max
+// means no limit.
+type DayCap struct {
+	Start, End time.Time
+	Max        int
+}
 
 const (
 	CancelledByGuest = "guest"
@@ -44,7 +53,7 @@ func (b Booking) Cancelled() bool { return !b.CancelledAt.IsZero() }
 // CreateBooking inserts b if its Invite is still active at now and no other
 // live Booking is within buffer of it. Both checks run in the same
 // transaction as the insert, so concurrent Guests cannot double-book.
-func (s *Store) CreateBooking(ctx context.Context, b Booking, manageTokenHash string, buffer time.Duration, now time.Time) (int64, error) {
+func (s *Store) CreateBooking(ctx context.Context, b Booking, manageTokenHash string, buffer time.Duration, dayCap DayCap, now time.Time) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -59,6 +68,9 @@ func (s *Store) CreateBooking(ctx context.Context, b Booking, manageTokenHash st
 		return 0, ErrInviteUnavailable
 	}
 	if err := checkFree(ctx, tx, b.Start, b.End, buffer, 0); err != nil {
+		return 0, err
+	}
+	if err := checkDayCap(ctx, tx, dayCap, 0); err != nil {
 		return 0, err
 	}
 	res, err := tx.ExecContext(ctx, `
@@ -77,13 +89,16 @@ func (s *Store) CreateBooking(ctx context.Context, b Booking, manageTokenHash st
 
 // RescheduleBooking moves a live Booking, checking for overlaps as
 // CreateBooking does. It does not consume an Invite use.
-func (s *Store) RescheduleBooking(ctx context.Context, id int64, start, end time.Time, buffer time.Duration) error {
+func (s *Store) RescheduleBooking(ctx context.Context, id int64, start, end time.Time, buffer time.Duration, dayCap DayCap) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	if err := checkFree(ctx, tx, start, end, buffer, id); err != nil {
+		return err
+	}
+	if err := checkDayCap(ctx, tx, dayCap, id); err != nil {
 		return err
 	}
 	res, err := tx.ExecContext(ctx, `
@@ -109,6 +124,24 @@ func checkFree(ctx context.Context, tx *sql.Tx, start, end time.Time, buffer tim
 	}
 	if n > 0 {
 		return ErrSlotTaken
+	}
+	return nil
+}
+
+func checkDayCap(ctx context.Context, tx *sql.Tx, c DayCap, exceptID int64) error {
+	if c.Max <= 0 {
+		return nil
+	}
+	var n int
+	err := tx.QueryRowContext(ctx, `
+		SELECT count(*) FROM bookings
+		WHERE cancelled_at IS NULL AND id != ? AND starts_at >= ? AND starts_at < ?`,
+		exceptID, c.Start.Unix(), c.End.Unix()).Scan(&n)
+	if err != nil {
+		return err
+	}
+	if n >= c.Max {
+		return ErrDayFull
 	}
 	return nil
 }

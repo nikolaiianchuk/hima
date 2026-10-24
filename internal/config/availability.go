@@ -18,6 +18,8 @@ type AvailabilityConfig struct {
 	MinNotice   time.Duration       `yaml:"min_notice"`
 	HorizonDays int                 `yaml:"horizon_days"`
 	Step        time.Duration       `yaml:"step"`
+	// MaxBookingsPerDay caps Bookings starting on one day; 0 means no cap.
+	MaxBookingsPerDay int `yaml:"max_bookings_per_day"`
 }
 
 type CalendarConfig struct {
@@ -61,6 +63,7 @@ func (c *Config) Availability() (schedule.Availability, error) {
 		MinNotice: ac.MinNotice,
 		Horizon:   time.Duration(ac.HorizonDays) * 24 * time.Hour,
 		Step:      ac.Step,
+		MaxPerDay: ac.MaxBookingsPerDay,
 	}
 	for name, ranges := range ac.Weekly {
 		wd, ok := weekdayNames[strings.ToLower(name)]

@@ -39,6 +39,16 @@ type Availability struct {
 	Horizon time.Duration
 	// Step is the spacing between candidate Slot starts within a DayRange.
 	Step time.Duration
+	// MaxPerDay caps live Bookings starting on one day in Location; 0 means
+	// no cap.
+	MaxPerDay int
+}
+
+// Day returns the bounds of the day in Location that t falls on.
+func (a Availability) Day(t time.Time) (start, end time.Time) {
+	y, m, d := t.In(a.Location).Date()
+	start = time.Date(y, m, d, 0, 0, 0, 0, a.Location)
+	return start, start.AddDate(0, 0, 1)
 }
 
 func (a Availability) Validate() error {
@@ -51,8 +61,8 @@ func (a Availability) Validate() error {
 	if a.Horizon <= 0 {
 		return errors.New("availability: horizon must be positive")
 	}
-	if a.Buffer < 0 || a.MinNotice < 0 {
-		return errors.New("availability: buffer and minimum notice cannot be negative")
+	if a.Buffer < 0 || a.MinNotice < 0 || a.MaxPerDay < 0 {
+		return errors.New("availability: buffer, minimum notice and daily cap cannot be negative")
 	}
 	for wd, ranges := range a.Weekly {
 		var prevEnd Clock

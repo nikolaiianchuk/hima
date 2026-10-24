@@ -447,3 +447,30 @@ func TestEditBooking(t *testing.T) {
 		t.Errorf("after end: err = %v", err)
 	}
 }
+
+func TestMaxBookingsPerDay(t *testing.T) {
+	e := newEnv(t)
+	e.Availability.MaxPerDay = 2
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{MaxUses: 10})
+	for _, at := range []time.Time{at("2026-10-26 10:00"), at("2026-10-26 11:00")} {
+		if _, _, err := e.Book(ctx, tok, at, 30*time.Minute, alex); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inv, _ := e.Invite(ctx, tok)
+	slots, _ := e.Slots(ctx, inv, 30*time.Minute, 0)
+	for _, s := range slots {
+		if s.Start.In(lisbon).Day() == 26 {
+			t.Fatalf("full Monday still offers %v", s.Start.In(lisbon))
+		}
+	}
+	if len(slots) == 0 {
+		t.Fatal("other days should still have slots")
+	}
+	// A Booking already on the full day may move within it.
+	_, manage, _ := e.Book(ctx, tok, at("2026-10-27 10:00"), 30*time.Minute, alex)
+	if _, err := e.Reschedule(ctx, manage, at("2026-10-26 11:30")); !errors.Is(err, ErrSlotUnavailable) {
+		t.Errorf("moving onto a full day: err = %v", err)
+	}
+}

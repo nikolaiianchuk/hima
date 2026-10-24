@@ -41,6 +41,7 @@ availability:
   min_notice: 12h       # earliest a Slot may start from now
   horizon_days: 30      # how far ahead Guests can book
   step: 30m             # spacing between Slot start times
+  max_bookings_per_day: 0   # 0 = no cap; e.g. 3 keeps a leaked Invite from filling a day
 
 # Pre-filled values for the "new Invite" form.
 invite_defaults:

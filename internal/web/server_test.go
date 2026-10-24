@@ -21,6 +21,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/notify"
+	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
 )
@@ -599,6 +600,50 @@ func TestContrastOnWhite(t *testing.T) {
 	for hex, ok := range map[string]bool{"#2D3E8F": true, "#16181A": true, "#FFFFFF": false, "#F5D76E": false, "#85570A": true} {
 		if validAccent(hex) != ok {
 			t.Errorf("validAccent(%s) = %v (ratio %.2f)", hex, !ok, contrastOnWhite(hex))
+		}
+	}
+}
+
+func TestBookingRateLimits(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	srv := ts.Config.Handler.(*Server)
+	srv.bookPerIP = ratelimit.New(2, time.Hour)
+	invite := ts.createInvite(t, defaultInvite)
+	form := url.Values{"start": {"0"}, "d": {"30"}, "tz": {"UTC"}}
+	for i := 0; i < 2; i++ {
+		if status, _, _ := ts.post(t, invite, form); status == http.StatusTooManyRequests {
+			t.Fatalf("attempt %d limited", i)
+		}
+	}
+	status, body, _ := ts.post(t, invite, form)
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("third attempt: %d", status)
+	}
+	mustContain(t, body, "Too many attempts")
+
+	// The per-Invite limit applies across IPs.
+	srv.bookPerIP = ratelimit.New(100, time.Second)
+	srv.bookPerInvite = ratelimit.New(1, time.Hour)
+	ts.post(t, invite, form)
+	if status, _, _ := ts.post(t, invite, form); status != http.StatusTooManyRequests {
+		t.Errorf("per-invite limit: %d", status)
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	for _, tc := range []struct{ remote, xff, want string }{
+		{"203.0.113.9:1234", "", "203.0.113.9"},
+		{"203.0.113.9:1234", "198.51.100.1", "203.0.113.9"}, // public peer: ignore spoofable header
+		{"172.18.0.3:5555", "10.0.0.1, 198.51.100.7", "198.51.100.7"},
+		{"127.0.0.1:5555", "garbage", "127.0.0.1"},
+	} {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = tc.remote
+		if tc.xff != "" {
+			r.Header.Set("X-Forwarded-For", tc.xff)
+		}
+		if got := clientIP(r); got != tc.want {
+			t.Errorf("clientIP(%s, %q) = %s, want %s", tc.remote, tc.xff, got, tc.want)
 		}
 	}
 }

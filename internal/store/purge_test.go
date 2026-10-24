@@ -30,7 +30,7 @@ func TestPurge(t *testing.T) {
 	// meeting ending at end.
 	book := func(inviteID int64, bookedAt, end time.Time, hash string) {
 		if _, err := s.CreateBooking(ctx, Booking{InviteID: inviteID, GuestName: "g", Start: end.Add(-time.Hour), End: end, CreatedAt: bookedAt},
-			hash, 0, bookedAt); err != nil {
+			hash, 0, DayCap{}, bookedAt); err != nil {
 			t.Fatal(err)
 		}
 	}

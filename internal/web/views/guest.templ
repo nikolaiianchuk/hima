@@ -441,6 +441,10 @@ templ NotFound(accent string) {
 	@deadEnd("This link doesn't lead anywhere", "Check that you copied the whole link.", "", accent)
 }
 
+templ TooMany(accent string) {
+	@deadEnd("Too many attempts", "Please wait a few minutes and try again.", "", accent)
+}
+
 templ Unavailable(accent string) {
 	@deadEnd("Booking is paused for a moment", "The calendar couldn't be checked just now. Please try again in a little while.", "", accent)
 }

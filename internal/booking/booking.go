@@ -180,12 +180,38 @@ func (s *Service) Slots(ctx context.Context, inv store.Invite, d time.Duration, 
 	if err != nil {
 		return nil, err
 	}
-	return s.Availability.Slots(schedule.Request{
+	slots := s.Availability.Slots(schedule.Request{
 		Now:      now,
 		Duration: d,
 		From:     inv.RangeStart,
 		To:       inv.RangeEnd,
-	}, append(busy, booked...)), nil
+	}, append(busy, booked...))
+	return s.dropFullDays(slots, booked), nil
+}
+
+// dropFullDays removes Slots on days that already have MaxPerDay Bookings.
+func (s *Service) dropFullDays(slots []schedule.Slot, booked []schedule.Interval) []schedule.Slot {
+	max := s.Availability.MaxPerDay
+	if max <= 0 {
+		return slots
+	}
+	perDay := map[time.Time]int{}
+	for _, b := range booked {
+		day, _ := s.Availability.Day(b.Start)
+		perDay[day]++
+	}
+	kept := slots[:0]
+	for _, sl := range slots {
+		if day, _ := s.Availability.Day(sl.Start); perDay[day] < max {
+			kept = append(kept, sl)
+		}
+	}
+	return kept
+}
+
+func (s *Service) dayCap(start time.Time) store.DayCap {
+	from, to := s.Availability.Day(start)
+	return store.DayCap{Start: from, End: to, Max: s.Availability.MaxPerDay}
 }
 
 // BusyBlocks returns Busy blocks within inv's date range and the booking
@@ -281,11 +307,11 @@ func (s *Service) Book(ctx context.Context, tok string, start time.Time, d time.
 		CreatedAt:    s.Now(),
 	}
 	manage := token.New()
-	b.ID, err = s.Store.CreateBooking(ctx, b, token.Hash(manage), s.Availability.Buffer, s.Now())
+	b.ID, err = s.Store.CreateBooking(ctx, b, token.Hash(manage), s.Availability.Buffer, s.dayCap(start), s.Now())
 	switch {
 	case errors.Is(err, store.ErrInviteUnavailable):
 		return store.Booking{}, "", ErrInviteDead
-	case errors.Is(err, store.ErrSlotTaken):
+	case errors.Is(err, store.ErrSlotTaken), errors.Is(err, store.ErrDayFull):
 		return store.Booking{}, "", ErrSlotUnavailable
 	case err != nil:
 		return store.Booking{}, "", err
@@ -384,8 +410,8 @@ func (s *Service) Reschedule(ctx context.Context, tok string, start time.Time) (
 	if err := s.checkSlot(ctx, m.Invite, start, d, m.ID); err != nil {
 		return store.Booking{}, err
 	}
-	err = s.Store.RescheduleBooking(ctx, m.ID, start, start.Add(d), s.Availability.Buffer)
-	if errors.Is(err, store.ErrSlotTaken) {
+	err = s.Store.RescheduleBooking(ctx, m.ID, start, start.Add(d), s.Availability.Buffer, s.dayCap(start))
+	if errors.Is(err, store.ErrSlotTaken) || errors.Is(err, store.ErrDayFull) {
 		return store.Booking{}, ErrSlotUnavailable
 	}
 	if err != nil {

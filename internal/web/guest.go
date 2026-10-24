@@ -365,6 +365,9 @@ func (s *Server) renderInvite(w http.ResponseWriter, r *http.Request, tok string
 
 func (s *Server) handleBook(w http.ResponseWriter, r *http.Request) {
 	tok := r.PathValue("token")
+	if !s.allowBooking(w, r, tok) {
+		return
+	}
 	inv, err := s.svc.Invite(r.Context(), tok)
 	if err != nil {
 		s.fail(w, r, err)
@@ -555,6 +558,9 @@ func (s *Server) renderReschedule(w http.ResponseWriter, r *http.Request, loc *t
 
 func (s *Server) handleReschedule(w http.ResponseWriter, r *http.Request) {
 	tok := r.PathValue("token")
+	if !s.allowBooking(w, r, "") {
+		return
+	}
 	loc := s.guestZone(url.Values{"tz": {r.PostFormValue("tz")}})
 	start, ok := parseStart(r.PostFormValue("start"))
 	if !ok {
