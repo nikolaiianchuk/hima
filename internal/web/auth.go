@@ -52,13 +52,13 @@ func (s *Server) hasSession(r *http.Request) bool {
 }
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, views.Login(false))
+	s.render(w, r, http.StatusOK, views.Login(false, s.currentAccent()))
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	pw := r.PostFormValue("password")
 	if bcrypt.CompareHashAndPassword([]byte(s.cfg.Auth.PasswordHash), []byte(pw)) != nil {
-		s.render(w, r, http.StatusUnauthorized, views.Login(true))
+		s.render(w, r, http.StatusUnauthorized, views.Login(true, s.currentAccent()))
 		return
 	}
 	tok := token.New()

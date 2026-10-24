@@ -133,6 +133,38 @@ func (c *Cache) Busy(from, to time.Time) ([]schedule.Interval, error) {
 	return out, nil
 }
 
+// SourceStatus describes one Calendar source for the admin.
+type SourceStatus struct {
+	// Name is the source's scheme and host; the secret path is hidden.
+	Name         string
+	AllDayBlocks bool
+	// LastSuccess is the last successful fetch, zero if never.
+	LastSuccess time.Time
+	// LastError is the error of the latest fetch, nil if it succeeded.
+	LastError error
+	// Current reports whether the source is trusted for Slots right now.
+	Current bool
+}
+
+// Status reports on every source, in configuration order.
+func (c *Cache) Status() []SourceStatus {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	cutoff := c.now().Add(-c.MaxAge)
+	out := make([]SourceStatus, len(c.sources))
+	for i, src := range c.sources {
+		e := c.entries[i]
+		out[i] = SourceStatus{
+			Name:         redact(src.URL),
+			AllDayBlocks: src.AllDayBlocks,
+			LastSuccess:  e.fetchedAt,
+			LastError:    e.err,
+			Current:      e.cal != nil && !e.fetchedAt.Before(cutoff),
+		}
+	}
+	return out
+}
+
 func (c *Cache) oldest() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()

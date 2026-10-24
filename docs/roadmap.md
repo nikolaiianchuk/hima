@@ -21,8 +21,8 @@ Terms follow [CONTEXT.md](../CONTEXT.md). Decisions: [docs/adr](./adr).
 - Edit a Booking's Location and note from the admin
 - Retention: purge past Bookings, dead Invites and old activity after 90 days
 - Deployment readiness: Docker image check, README, reverse-proxy guide
-- Week-grid view of Busy blocks for Invites that opt in
-- Align the UI with the Owner's design
+- ~~Week-grid view of Busy blocks for Invites that opt in~~ (done as a per-day busy bar in the new design)
+- ~~Align the UI with the Owner's design~~ (done)
 
 ## Phase 2 — write-back
 

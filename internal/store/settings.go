@@ -11,6 +11,7 @@ import (
 const (
 	SettingFeedTokenHash = "feed_token_hash"
 	SettingFeedCreatedAt = "feed_created_at"
+	SettingAccent        = "accent"
 )
 
 // Setting returns the value for key, or "" if unset.

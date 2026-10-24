@@ -22,13 +22,31 @@ const (
 )
 
 // Invite is a shareable, expiring link that lets a Guest make Bookings.
+// Location kinds.
+const (
+	LocationNone  = ""
+	LocationPlace = "place"
+	LocationPhone = "phone"
+	LocationVideo = "video"
+)
+
+// ValidLocationKind reports whether k is a known Location kind.
+func ValidLocationKind(k string) bool {
+	switch k {
+	case LocationNone, LocationPlace, LocationPhone, LocationVideo:
+		return true
+	}
+	return false
+}
+
 type Invite struct {
-	ID        int64
-	Label     string
-	Location  string
-	Durations []time.Duration
-	MaxUses   int
-	ExpiresAt time.Time
+	ID           int64
+	Label        string
+	Location     string
+	LocationKind string
+	Durations    []time.Duration
+	MaxUses      int
+	ExpiresAt    time.Time
 	// RangeStart and RangeEnd narrow Availability; zero means unbounded.
 	RangeStart, RangeEnd time.Time
 	ShowBusy             bool
@@ -62,10 +80,10 @@ func (i Invite) AllowsDuration(d time.Duration) bool {
 
 func (s *Store) CreateInvite(ctx context.Context, inv Invite, tokenHash string) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
-		INSERT INTO invites (token_hash, label, location, durations, max_uses, expires_at,
+		INSERT INTO invites (token_hash, label, location, location_kind, durations, max_uses, expires_at,
 		                     range_start, range_end, show_busy, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		tokenHash, inv.Label, inv.Location, formatDurations(inv.Durations), inv.MaxUses,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		tokenHash, inv.Label, inv.Location, inv.LocationKind, formatDurations(inv.Durations), inv.MaxUses,
 		inv.ExpiresAt.Unix(), nullTime(inv.RangeStart), nullTime(inv.RangeEnd), inv.ShowBusy,
 		inv.CreatedAt.Unix())
 	if err != nil {
@@ -75,7 +93,7 @@ func (s *Store) CreateInvite(ctx context.Context, inv Invite, tokenHash string) 
 }
 
 const inviteColumns = `
-	i.id, i.label, i.location, i.durations, i.max_uses, i.expires_at, i.range_start,
+	i.id, i.label, i.location, i.location_kind, i.durations, i.max_uses, i.expires_at, i.range_start,
 	i.range_end, i.show_busy, i.revoked_at, i.created_at,
 	(SELECT count(*) FROM bookings b WHERE b.invite_id = i.id)`
 
@@ -130,7 +148,7 @@ func scanInvite(row scanner) (Invite, error) {
 		expires, created            int64
 		rangeStart, rangeEnd, revok sql.NullInt64
 	)
-	err := row.Scan(&inv.ID, &inv.Label, &inv.Location, &durations, &inv.MaxUses, &expires,
+	err := row.Scan(&inv.ID, &inv.Label, &inv.Location, &inv.LocationKind, &durations, &inv.MaxUses, &expires,
 		&rangeStart, &rangeEnd, &inv.ShowBusy, &revok, &created, &inv.Uses)
 	if errors.Is(err, sql.ErrNoRows) {
 		return inv, ErrNotFound

@@ -1,0 +1,19 @@
+package views
+
+import "strconv"
+
+// logoMark is the "slot" mark: a 3×3 grid of days with one open Slot drawn
+// in the accent colour. muted draws it in greys, for dead-end pages.
+templ logoMark(size int, muted bool) {
+	<svg class={ "icon", "logo", templ.KV("logo-muted", muted) } width={ strconv.Itoa(size) } height={ strconv.Itoa(size) } viewBox="0 0 48 48" role="img" aria-label="hima">
+		<rect x="4" y="4" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="18.5" y="4" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="33" y="4" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="4" y="18.5" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="18.5" y="18.5" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="34" y="19.5" width="9" height="9" rx="2" fill="none" stroke-width="2" style="stroke: var(--accent)"></rect>
+		<rect x="4" y="33" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="18.5" y="33" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+		<rect x="33" y="33" width="11" height="11" rx="2.5" fill="currentColor"></rect>
+	</svg>
+}

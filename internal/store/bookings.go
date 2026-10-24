@@ -23,14 +23,17 @@ const (
 
 // Booking is a reserved time with the Owner, made by a Guest through an Invite.
 type Booking struct {
-	ID          int64
-	InviteID    int64
-	InviteLabel string
-	GuestName   string
-	Note        string
-	Location    string
-	Start, End  time.Time
-	Sequence    int
+	ID           int64
+	InviteID     int64
+	InviteLabel  string
+	GuestName    string
+	Note         string
+	Location     string
+	LocationKind string
+	Start, End   time.Time
+	Sequence     int
+	// Reschedules counts moves by the Guest.
+	Reschedules int
 	CancelledAt time.Time // zero unless cancelled
 	CancelledBy string
 	CreatedAt   time.Time
@@ -59,9 +62,9 @@ func (s *Store) CreateBooking(ctx context.Context, b Booking, manageTokenHash st
 		return 0, err
 	}
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO bookings (invite_id, manage_token_hash, guest_name, note, location, starts_at, ends_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		b.InviteID, manageTokenHash, b.GuestName, b.Note, b.Location, b.Start.Unix(), b.End.Unix(), b.CreatedAt.Unix())
+		INSERT INTO bookings (invite_id, manage_token_hash, guest_name, note, location, location_kind, starts_at, ends_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.InviteID, manageTokenHash, b.GuestName, b.Note, b.Location, b.LocationKind, b.Start.Unix(), b.End.Unix(), b.CreatedAt.Unix())
 	if err != nil {
 		return 0, err
 	}
@@ -84,7 +87,7 @@ func (s *Store) RescheduleBooking(ctx context.Context, id int64, start, end time
 		return err
 	}
 	res, err := tx.ExecContext(ctx, `
-		UPDATE bookings SET starts_at = ?, ends_at = ?, sequence = sequence + 1
+		UPDATE bookings SET starts_at = ?, ends_at = ?, sequence = sequence + 1, reschedules = reschedules + 1
 		WHERE id = ? AND cancelled_at IS NULL`, start.Unix(), end.Unix(), id)
 	if err != nil {
 		return err
@@ -125,8 +128,8 @@ func (s *Store) CancelBooking(ctx context.Context, id int64, by string, now time
 }
 
 const bookingColumns = `
-	b.id, b.invite_id, i.label, b.guest_name, b.note, b.location, b.starts_at, b.ends_at,
-	b.sequence, b.cancelled_at, coalesce(b.cancelled_by, ''), b.created_at`
+	b.id, b.invite_id, i.label, b.guest_name, b.note, b.location, b.location_kind, b.starts_at, b.ends_at,
+	b.sequence, b.reschedules, b.cancelled_at, coalesce(b.cancelled_by, ''), b.created_at`
 
 func (s *Store) BookingByManageHash(ctx context.Context, hash string) (Booking, error) {
 	return scanBooking(s.db.QueryRowContext(ctx,
@@ -140,9 +143,20 @@ func (s *Store) BookingByID(ctx context.Context, id int64) (Booking, error) {
 
 // ListBookings returns Bookings ending after since, soonest first.
 func (s *Store) ListBookings(ctx context.Context, since time.Time) ([]Booking, error) {
-	rows, err := s.db.QueryContext(ctx,
+	return s.queryBookings(ctx,
 		"SELECT"+bookingColumns+" FROM bookings b JOIN invites i ON i.id = b.invite_id WHERE b.ends_at > ? ORDER BY b.starts_at",
 		since.Unix())
+}
+
+// BookingsForInvite returns an Invite's Bookings, soonest first.
+func (s *Store) BookingsForInvite(ctx context.Context, inviteID int64) ([]Booking, error) {
+	return s.queryBookings(ctx,
+		"SELECT"+bookingColumns+" FROM bookings b JOIN invites i ON i.id = b.invite_id WHERE b.invite_id = ? ORDER BY b.starts_at",
+		inviteID)
+}
+
+func (s *Store) queryBookings(ctx context.Context, query string, args ...any) ([]Booking, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -186,8 +200,8 @@ func scanBooking(row scanner) (Booking, error) {
 		start, end, created int64
 		cancelled           sql.NullInt64
 	)
-	err := row.Scan(&b.ID, &b.InviteID, &b.InviteLabel, &b.GuestName, &b.Note, &b.Location,
-		&start, &end, &b.Sequence, &cancelled, &b.CancelledBy, &created)
+	err := row.Scan(&b.ID, &b.InviteID, &b.InviteLabel, &b.GuestName, &b.Note, &b.Location, &b.LocationKind,
+		&start, &end, &b.Sequence, &b.Reschedules, &cancelled, &b.CancelledBy, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return b, ErrNotFound
 	}

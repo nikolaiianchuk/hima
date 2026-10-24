@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -113,5 +114,22 @@ func TestRefreshIfOlder(t *testing.T) {
 func TestRedact(t *testing.T) {
 	if got := redact("https://calendar.google.com/calendar/ical/secret/basic.ics"); got != "https://calendar.google.com/…" {
 		t.Errorf("redact = %q", got)
+	}
+}
+
+func TestStatus(t *testing.T) {
+	srv := newServer(t)
+	now := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	c := New([]Source{{URL: srv.URL + "/secret/path.ics", AllDayBlocks: true}}, ics.Options{Location: time.UTC}, srv.Client())
+	c.now = func() time.Time { return now }
+	if st := c.Status(); st[0].Current || !st[0].LastSuccess.IsZero() {
+		t.Errorf("before fetch: %+v", st[0])
+	}
+	c.Refresh(context.Background())
+	srv.fail.Store(true)
+	c.Refresh(context.Background())
+	st := c.Status()[0]
+	if !st.Current || st.LastError == nil || !st.LastSuccess.Equal(now) || !st.AllDayBlocks || strings.Contains(st.Name, "secret") {
+		t.Errorf("status %+v", st)
 	}
 }

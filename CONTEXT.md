@@ -84,6 +84,7 @@ _Avoid_: Free time, opening
 - A **Guest** sees only **Slots** by default; an **Invite** may opt in to also showing **Busy blocks**, and never beyond its own date range
 - **Busy blocks** come from **Calendar sources** and from existing **Bookings**; a new **Booking** is a **Busy block** immediately
 - A **Booking** takes its **Location** from its **Invite**; the **Guest** supplies a **Guest name** and optional note, never the **Location**
+- Before booking, a **Guest** sees what kind of **Location** it is (place, phone call, video call); call details are revealed only once booked
 - Only the **Guest** reschedules a **Booking** (via the **Manage link**); the **Owner** may cancel it or edit its location and notes, but not move it
 - There is exactly one **Owner feed**; Guests have no feed and get a one-off calendar file plus their **Manage link**
 - **Busy blocks** are the union of every **Calendar source**; if any source cannot be trusted as current, no **Slots** are offered

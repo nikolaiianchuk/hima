@@ -10,7 +10,8 @@
 - **Guests** pick a Slot in their own time zone, give their name, get a `.ics` file and a private Manage link to reschedule or cancel.
 - **Your calendar**: a private feed of all Bookings to subscribe to.
 - **Notifications** via ntfy (optionally with the `.ics` attached) and/or a webhook, plus an activity log.
-- **Small and private**: one Go binary, one SQLite file, no outgoing calls except to your calendars and notification endpoints. Old data is deleted after 90 days.
+- **Your look**: pick an accent colour in Settings; it applies to the admin and every Guest page.
+- **Small and private**: one Go binary, one SQLite file, fonts bundled (Guest pages make no third-party requests), no outgoing calls except to your calendars and notification endpoints. Old data is deleted after 90 days.
 
 > Early development. See [docs/roadmap.md](docs/roadmap.md) for what's planned and [CONTEXT.md](CONTEXT.md) for the domain language.
 

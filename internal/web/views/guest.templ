@@ -6,214 +6,441 @@ type Choice struct {
 	Active bool
 }
 
-type SlotLink struct {
-	Time string
-	Href string
-}
-
-type SlotDay struct {
-	Label string
-	Slots []SlotLink
-	Busy  []string
-}
-
-// TZForm lets a Guest change the time zone times are shown in.
-type TZForm struct {
+// TZPicker shows the Guest's time zone with a way to change it.
+type TZPicker struct {
+	Label   string // "Copenhagen (UTC+1)"
 	Current string
 	Choices []string
 	// Keep are query parameters to carry over when the zone changes.
 	Keep map[string]string
 }
 
+type DayCell struct {
+	N        string
+	Label    string
+	Href     string
+	Open     bool
+	Selected bool
+}
+
+type SlotLink struct {
+	Time string
+	Href string
+}
+
+// BusyBar draws the selected day's busy and free time for Invites that opt in.
+type BusyBar struct {
+	Busy   []bool
+	Labels []string
+	Aria   string
+}
+
 type SlotsPage struct {
-	Title     string
-	Intro     string
-	Location  string
-	Durations []Choice
-	Days      []SlotDay
-	TZ        TZForm
-	Error     string
+	Accent        string
+	Title         string
+	Intro         string
+	LocationKind  string
+	LocationLabel string
+	DateRange     string
+	Durations     []Choice
+	TZ            TZPicker
+	PrevHref      string
+	NextHref      string
+	Days          []DayCell
+	DayHeading    string
+	CountLabel    string
+	Slots         []SlotLink
+	Busy          *BusyBar
+	Error         string
+	Footer        string
 }
 
 templ Slots(p SlotsPage) {
-	@layout(p.Title) {
+	@guestLayout(p.Title, p.Accent) {
 		@detectTimezone()
-		<h1>{ p.Title }</h1>
-		if p.Intro != "" {
-			<p class="muted">{ p.Intro }</p>
-		}
-		if p.Location != "" {
-			<p class="small">📍 { p.Location }</p>
-		}
-		if p.Error != "" {
-			<p class="error">{ p.Error }</p>
-		}
-		if len(p.Durations) > 1 {
-			<div class="row" style="margin-top:1rem">
-				for _, d := range p.Durations {
-					<a class={ "pill", templ.KV("active", d.Active) } href={ templ.SafeURL(d.Href) }>{ d.Label }</a>
-				}
-			</div>
-		}
-		@tzForm(p.TZ)
-		if len(p.Days) == 0 {
-			<div class="card">
-				<p>No free times right now.</p>
-			</div>
-		}
-		for _, day := range p.Days {
-			<div class="day">{ day.Label }</div>
-			if len(day.Slots) > 0 {
-				<div class="slots">
-					for _, s := range day.Slots {
-						<a href={ templ.SafeURL(s.Href) }>{ s.Time }</a>
+		<div class="g-page">
+			@guestHeader("w-1080")
+			<main class="g-main w-1080 g-panels">
+				<section class="g-panel" aria-label="About this Invite">
+					<h1 class="g-title">{ p.Title }</h1>
+					if p.Intro != "" {
+						<p class="ink-2">{ p.Intro }</p>
 					}
-				</div>
-			} else {
-				<p class="small muted">No free times.</p>
+					<div class="g-meta">
+						if p.LocationLabel != "" {
+							<div>
+								@locationIcon(p.LocationKind, 18)
+								<span>{ p.LocationLabel }</span>
+							</div>
+						}
+						if p.DateRange != "" {
+							<div>
+								@iconCalendar(18)
+								<span>{ p.DateRange }</span>
+							</div>
+						}
+					</div>
+					if len(p.Durations) > 1 {
+						<div class="stack gap-8">
+							<span id="durl" class="small muted" style="font-weight: 500">Duration</span>
+							<div role="group" aria-labelledby="durl" class="row gap-8">
+								for _, d := range p.Durations {
+									<a class="dur" href={ templ.SafeURL(d.Href) } aria-current={ boolAttr(d.Active) }>{ d.Label }</a>
+								}
+							</div>
+						</div>
+					}
+					@tzPicker(p.TZ)
+				</section>
+				<section class="g-panel wide" aria-labelledby="calh">
+					<div class="row" style="justify-content: space-between">
+						<h2 id="calh" class="g-h2">Pick a day</h2>
+						<div class="cal-nav">
+							if p.PrevHref != "" {
+								<a href={ templ.SafeURL(p.PrevHref) } aria-label="Earlier">
+									@iconChevronLeft(20)
+								</a>
+							} else {
+								<span aria-hidden="true">
+									@iconChevronLeft(20)
+								</span>
+							}
+							if p.NextHref != "" {
+								<a href={ templ.SafeURL(p.NextHref) } aria-label="Later">
+									@iconChevronRight(20)
+								</a>
+							} else {
+								<span aria-hidden="true">
+									@iconChevronRight(20)
+								</span>
+							}
+						</div>
+					</div>
+					<div class="weekdays" aria-hidden="true">
+						<span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+					</div>
+					<div class="days">
+						for _, d := range p.Days {
+							if d.Open {
+								<a class="day" href={ templ.SafeURL(d.Href) } aria-label={ d.Label } aria-current={ dateAttr(d.Selected) }>{ d.N }</a>
+							} else {
+								<span class="day off" aria-label={ d.Label }>{ d.N }</span>
+							}
+						}
+					</div>
+					<span class="small muted">Days without free times are greyed out.</span>
+				</section>
+				<section class="g-panel slots-col" aria-labelledby="slh">
+					<div class="row gap-8" style="justify-content: space-between; align-items: baseline">
+						<h2 id="slh" class="g-h2">{ p.DayHeading }</h2>
+						<span class="small muted">{ p.CountLabel }</span>
+					</div>
+					if p.Error != "" {
+						<p class="error" role="alert">{ p.Error }</p>
+					}
+					if p.Busy != nil {
+						<div class="stack gap-6">
+							<div class="busybar" role="img" aria-label={ p.Busy.Aria }>
+								for _, b := range p.Busy.Busy {
+									<div class={ templ.KV("busy", b) }></div>
+								}
+							</div>
+							<div class="busybar-labels">
+								for _, l := range p.Busy.Labels {
+									<span>{ l }</span>
+								}
+							</div>
+						</div>
+					}
+					if len(p.Slots) == 0 {
+						<p class="small muted">No free times on this day.</p>
+					} else {
+						<div class="slots">
+							for _, s := range p.Slots {
+								<a class="slot" href={ templ.SafeURL(s.Href) }>{ s.Time }</a>
+							}
+						</div>
+					}
+				</section>
+			</main>
+			if p.Footer != "" {
+				<p class="g-foot w-1080">{ p.Footer }</p>
 			}
-			for _, b := range day.Busy {
-				<div class="busy">Busy { b }</div>
-			}
-		}
+		</div>
 	}
 }
 
-templ tzForm(f TZForm) {
-	<form method="get" class="row small muted" style="margin:1rem 0">
-		<span>Times shown in</span>
-		for k, v := range f.Keep {
-			<input type="hidden" name={ k } value={ v }/>
-		}
-		<select name="tz" onchange="this.form.submit()" style="width:auto">
-			for _, z := range f.Choices {
-				<option value={ z } selected?={ z == f.Current }>{ z }</option>
-			}
-		</select>
-		<noscript><button type="submit" class="secondary">Change</button></noscript>
-	</form>
+templ tzPicker(t TZPicker) {
+	<div class="tz row gap-8">
+		@iconGlobe(16)
+		<span>{ t.Label }</span>
+		<details>
+			<summary>Change</summary>
+			<form method="get">
+				for k, v := range t.Keep {
+					<input type="hidden" name={ k } value={ v }/>
+				}
+				<label for="tz" class="sr-only">Time zone</label>
+				<select id="tz" name="tz" class="input" onchange="this.form.submit()">
+					for _, z := range t.Choices {
+						<option value={ z } selected?={ z == t.Current }>{ z }</option>
+					}
+				</select>
+				<noscript><button type="submit" class="btn btn-plain">Show</button></noscript>
+			</form>
+		</details>
+	</div>
 }
 
 type ConfirmPage struct {
-	Title     string
-	When      string
-	OwnerWhen string
-	Duration  string
-	Location  string
-	Action    string
-	Start     string
-	Minutes   string
-	TZ        string
+	Accent       string
+	Heading      string
+	BackHref     string
+	DayLong      string
+	TimeRange    string
+	OwnerName    string
+	LocationKind string
+	LocationText string
+	TZLabel      string
+	OwnerTime    string
+	Action       string
+	Start        string
+	Minutes      string
+	TZ           string
 	// AskDetails is false when rescheduling: name and note are already known.
-	AskDetails bool
-	Name       string
-	Note       string
-	Error      string
-	BackHref   string
-	Submit     string
+	AskDetails      bool
+	Name            string
+	Note            string
+	NotePlaceholder string
+	Submit          string
+	Error           string
+	Footnote        string
 }
 
 templ Confirm(p ConfirmPage) {
-	@layout(p.Title) {
-		<h1>{ p.Title }</h1>
-		<div class="card">
-			<p><strong>{ p.When }</strong></p>
-			if p.OwnerWhen != "" {
-				<p class="small muted">{ p.OwnerWhen }</p>
-			}
-			<p class="small">{ p.Duration }</p>
-			if p.Location != "" {
-				<p class="small">📍 { p.Location }</p>
-			}
+	@guestLayout(p.Heading, p.Accent) {
+		<div class="g-page">
+			@guestHeader("w-880")
+			<main class="g-main w-880 g-panels">
+				<section class="g-panel" aria-label="Your choice" style="padding-top: 20px; gap: 18px">
+					<a class="back" href={ templ.SafeURL(p.BackHref) }>
+						@iconChevronLeft(18)
+						Other times
+					</a>
+					<div class="stack gap-2">
+						<span class="muted" style="font-size: 14px">{ p.DayLong }</span>
+						<span class="big-time">{ p.TimeRange }</span>
+						if p.OwnerTime != "" {
+							<span class="small muted">{ p.OwnerTime }</span>
+						}
+					</div>
+					<div class="g-meta sm">
+						<div>
+							@iconPerson(16)
+							<span>With { p.OwnerName }</span>
+						</div>
+						if p.LocationText != "" {
+							<div>
+								@locationIcon(p.LocationKind, 16)
+								<span>{ p.LocationText }</span>
+							</div>
+						}
+						<div>
+							@iconGlobe(16)
+							<span>{ p.TZLabel }</span>
+						</div>
+					</div>
+				</section>
+				<section class="g-panel form-col" aria-labelledby="dh">
+					<h1 id="dh" class="g-title" style="font-size: 24px">{ p.Heading }</h1>
+					if p.Error != "" {
+						<p class="error" role="alert">{ p.Error }</p>
+					}
+					<form method="post" action={ templ.SafeURL(p.Action) } class="stack gap-18">
+						<input type="hidden" name="start" value={ p.Start }/>
+						<input type="hidden" name="d" value={ p.Minutes }/>
+						<input type="hidden" name="tz" value={ p.TZ }/>
+						if p.AskDetails {
+							<div class="field">
+								<label for="gname">Your name</label>
+								<input id="gname" class="input input-lg" type="text" name="name" value={ p.Name } maxlength="100" required autocomplete="name"/>
+							</div>
+							<div class="field">
+								<label for="gnote">Note <span class="muted" style="font-weight: 400">(optional)</span></label>
+								<textarea id="gnote" class="input" name="note" rows="3" maxlength="1000" placeholder={ p.NotePlaceholder }>{ p.Note }</textarea>
+							</div>
+						}
+						<button type="submit" class="btn btn-lg btn-block">{ p.Submit }</button>
+					</form>
+					<p class="small muted pretty">{ p.Footnote }</p>
+				</section>
+			</main>
 		</div>
-		if p.Error != "" {
-			<p class="error">{ p.Error }</p>
-		}
-		<form method="post" action={ templ.SafeURL(p.Action) }>
-			<input type="hidden" name="start" value={ p.Start }/>
-			<input type="hidden" name="d" value={ p.Minutes }/>
-			<input type="hidden" name="tz" value={ p.TZ }/>
-			if p.AskDetails {
-				<label for="name">Your name</label>
-				<input id="name" type="text" name="name" value={ p.Name } maxlength="100" required autofocus autocomplete="name"/>
-				<label for="note">What's it about? <span class="muted small">(optional)</span></label>
-				<textarea id="note" name="note" maxlength="1000">{ p.Note }</textarea>
-			}
-			<p class="row" style="margin-top:1rem">
-				<button type="submit">{ p.Submit }</button>
-				<a class="button secondary" href={ templ.SafeURL(p.BackHref) }>Pick another time</a>
-			</p>
-		</form>
+	}
+}
+
+type BookedPage struct {
+	Accent       string
+	GuestName    string
+	DayLong      string
+	OwnerName    string
+	TimeRange    string
+	Offset       string
+	LocationText string
+	ICSHref      string
+	ManageURL    string
+	ManageHref   string
+}
+
+templ Booked(p BookedPage) {
+	@guestLayout("You're booked", p.Accent) {
+		@detectTimezone()
+		<div class="g-page">
+			@guestHeader("w-560")
+			<main class="g-main w-560 g-card">
+				<div class="stack gap-14">
+					<div class="check-badge" aria-hidden="true">
+						@iconCheck(26)
+					</div>
+					<h1 class="g-title">You're booked, { p.GuestName }</h1>
+					<div class="stack gap-2">
+						<span class="ink-2">{ p.DayLong } · with { p.OwnerName }</span>
+						<span class="mono" style="font-size: 22px; font-weight: 500">{ p.TimeRange } <span class="muted" style="font-size: 14px; font-weight: 400">{ p.Offset }</span></span>
+						if p.LocationText != "" {
+							<span class="ink-2">{ p.LocationText }</span>
+						}
+					</div>
+				</div>
+				<a class="btn btn-lg btn-outline btn-block" href={ templ.SafeURL(p.ICSHref) }>
+					@iconDownload(20)
+					Add to calendar (.ics)
+				</a>
+				<section class="keep" aria-labelledby="mlh">
+					<h2 id="mlh">Keep this link</h2>
+					<p class="pretty">It's the only way to reschedule or cancel. Nothing is emailed, so save it now. It's also inside the calendar file.</p>
+					@copyRow("mlink", "Manage link", p.ManageURL, "")
+				</section>
+				<a class="back" href={ templ.SafeURL(p.ManageHref) }>Open my Booking</a>
+			</main>
+		</div>
+		@copyScript()
 	}
 }
 
 type ManagePage struct {
-	JustBooked     bool
-	JustChanged    bool
-	Title          string
-	When           string
-	OwnerWhen      string
-	Duration       string
+	Accent         string
+	Notice         string
+	PillText       string
+	PillClass      string
+	OwnerName      string
+	DayLong        string
+	TimeRange      string
+	OwnerTime      string
+	GuestName      string
+	LocationKind   string
 	Location       string
+	LocationIsLink bool
 	Note           string
-	Status         string
-	Cancelled      bool
+	TZ             TZPicker
 	Changeable     bool
-	ManageURL      string
+	StatusText     string
+	RescheduleHref string
 	ICSHref        string
 	CancelAction   string
-	RescheduleHref string
-	TZ             string
 }
 
 templ Manage(p ManagePage) {
-	@layout(p.Title) {
+	@guestLayout("Your Booking", p.Accent) {
 		@detectTimezone()
-		if p.JustBooked {
-			<h1>You're booked ✓</h1>
-		} else if p.JustChanged {
-			<h1>Done ✓</h1>
-		} else {
-			<h1>{ p.Title }</h1>
-		}
-		<div class="card">
-			<p><strong>{ p.When }</strong></p>
-			if p.OwnerWhen != "" {
-				<p class="small muted">{ p.OwnerWhen }</p>
-			}
-			<p class="small">{ p.Duration }</p>
-			if p.Location != "" {
-				<p class="small">📍 { p.Location }</p>
-			}
-			if p.Note != "" {
-				<p class="small muted">“{ p.Note }”</p>
-			}
-			<p class={ "small", templ.KV("error", p.Cancelled), templ.KV("ok", !p.Cancelled) }>{ p.Status }</p>
+		<div class="g-page">
+			@guestHeader("w-880")
+			<main class="g-main w-880 g-panels">
+				<section class="g-panel form-col" aria-labelledby="mh">
+					if p.Notice != "" {
+						<p class="notice" role="status">{ p.Notice }</p>
+					}
+					<span class={ "pill", p.PillClass }>{ p.PillText }</span>
+					<h1 id="mh" class="g-title" style="font-size: 26px">Your Booking with { p.OwnerName }</h1>
+					<div class="stack gap-2">
+						<span class="muted" style="font-size: 14px">{ p.DayLong }</span>
+						<span class="big-time" style="font-size: 26px">{ p.TimeRange }</span>
+						if p.OwnerTime != "" {
+							<span class="small muted">{ p.OwnerTime }</span>
+						}
+					</div>
+					<dl class="facts">
+						<dt>Name</dt>
+						<dd>{ p.GuestName }</dd>
+						if p.Location != "" {
+							<dt>Where</dt>
+							<dd>
+								if p.LocationIsLink {
+									<a href={ templ.SafeURL(p.Location) } rel="noreferrer noopener" target="_blank">{ p.Location }</a>
+								} else {
+									{ p.Location }
+								}
+							</dd>
+						}
+						if p.Note != "" {
+							<dt>Note</dt>
+							<dd class="ink-2">{ p.Note }</dd>
+						}
+					</dl>
+					@tzPicker(p.TZ)
+				</section>
+				<section class="g-panel" aria-label="Change this Booking" style="gap: 12px">
+					if p.Changeable {
+						<a class="btn btn-lg btn-block" href={ templ.SafeURL(p.RescheduleHref) }>Pick another time</a>
+						<a class="btn btn-lg btn-plain btn-block" href={ templ.SafeURL(p.ICSHref) }>
+							@iconDownload(18)
+							Calendar file (.ics)
+						</a>
+						<form method="post" action={ templ.SafeURL(p.CancelAction) } onsubmit="return confirm('Cancel this Booking? This can\'t be undone.')" style="display: flex; justify-content: center">
+							<button type="submit" class="link-btn danger underline" style="min-height: 48px; font-size: 15px">Cancel this Booking</button>
+						</form>
+						<p class="small muted pretty" style="margin-top: auto">Rescheduling keeps your Booking. You don't need a new Invite. Cancelling can't be undone.</p>
+					} else {
+						<p class="ink-2 pretty" style="font-size: 14px; line-height: 1.55">{ p.StatusText }</p>
+						if p.ICSHref != "" {
+							<a class="btn btn-plain btn-block" href={ templ.SafeURL(p.ICSHref) }>
+								@iconDownload(18)
+								Calendar file (.ics)
+							</a>
+						}
+					}
+				</section>
+			</main>
 		</div>
-		if !p.Cancelled {
-			<p><a class="button" href={ templ.SafeURL(p.ICSHref) }>Add to calendar (.ics)</a></p>
-		}
-		if p.JustBooked {
-			<div class="card">
-				<p><strong>Save this link</strong> to reschedule or cancel later. It's the only way back to this booking.</p>
-				@copyBox(p.ManageURL)
-			</div>
-		}
-		if p.Changeable {
-			<h2>Need to change it?</h2>
-			<div class="row">
-				<a class="button secondary" href={ templ.SafeURL(p.RescheduleHref) }>Reschedule</a>
-				<form method="post" action={ templ.SafeURL(p.CancelAction) } class="inline" onsubmit="return confirm('Cancel this booking?')">
-					<button type="submit" class="danger">Cancel booking</button>
-				</form>
-			</div>
-		}
 	}
 }
 
-templ copyBox(value string) {
-	<div class="link-box">
-		<input type="text" readonly value={ value } onclick="this.select()"/>
-		<button type="button" class="secondary" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(() => { this.textContent = 'Copied' })">Copy</button>
-	</div>
+// deadEnd is a calm full-page message for links that lead nowhere.
+templ deadEnd(title, lead, detail, accent string) {
+	@guestLayout(title, accent) {
+		<div class="centered">
+			<main>
+				@logoMark(56, true)
+				<h1>{ title }</h1>
+				<p class="lead pretty">{ lead }</p>
+				if detail != "" {
+					<p class="muted pretty" style="font-size: 14px; line-height: 1.6">{ detail }</p>
+				}
+			</main>
+		</div>
+	}
+}
+
+// DeadInvite is shown for Used up, Expired, Revoked and unknown Invites alike,
+// so Guests cannot tell them apart.
+templ DeadInvite(accent string) {
+	@deadEnd("This Invite can't be used", "Ask the person who sent it for a new one.",
+		"Already booked? Use the private link you saved when you booked. It still works.", accent)
+}
+
+templ NotFound(accent string) {
+	@deadEnd("This link doesn't lead anywhere", "Check that you copied the whole link.", "", accent)
+}
+
+templ Unavailable(accent string) {
+	@deadEnd("Booking is paused for a moment", "The calendar couldn't be checked just now. Please try again in a little while.", "", accent)
 }

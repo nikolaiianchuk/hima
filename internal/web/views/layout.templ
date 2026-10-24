@@ -1,56 +1,51 @@
 package views
 
-templ layout(title string) {
+// Assets are the versioned URLs of the stylesheets, set at startup.
+type Assets struct {
+	CSS   string
+	Fonts string
+}
+
+// CurrentAssets is set once by the web package at startup.
+var CurrentAssets = Assets{CSS: "/static/hima.css", Fonts: "/static/fonts.css"}
+
+templ head(title, accent string) {
+	<head>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1"/>
+		<meta name="referrer" content="no-referrer"/>
+		<meta name="robots" content="noindex"/>
+		<title>{ title } · hima</title>
+		<link rel="stylesheet" href={ CurrentAssets.Fonts }/>
+		<link rel="stylesheet" href={ CurrentAssets.CSS }/>
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml"/>
+		@accentStyle(accent)
+	</head>
+}
+
+// accentStyle sets the Owner's accent colour. accent is validated as #RRGGBB
+// before it gets here, so it is safe to inline.
+templ accentStyle(accent string) {
+	if isHexColor(accent) {
+		@templ.Raw("<style>:root{--accent:" + accent + "}</style>")
+	}
+}
+
+templ guestLayout(title, accent string) {
 	<!DOCTYPE html>
 	<html lang="en">
-		<head>
-			<meta charset="utf-8"/>
-			<meta name="viewport" content="width=device-width, initial-scale=1"/>
-			<meta name="referrer" content="no-referrer"/>
-			<title>{ title } · hima</title>
-			<style>
-				:root { color-scheme: light dark; --fg: #1d1d1f; --bg: #fafaf7; --card: #fff; --line: #e4e2dc; --muted: #6e6e73; --accent: #b4553a; --accent-fg: #fff; --ok: #2f7d4f; --warn: #a33; }
-				@media (prefers-color-scheme: dark) { :root { --fg: #f2f2ee; --bg: #161615; --card: #1f1f1d; --line: #34332f; --muted: #9a9a95; --accent: #e08a6d; --accent-fg: #1a1a1a; --ok: #6cc08f; --warn: #f08a8a; } }
-				* { box-sizing: border-box; }
-				body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
-				main { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
-				h1 { font-size: 1.5rem; margin: 0 0 .5rem; }
-				h2 { font-size: 1.1rem; margin: 2rem 0 .75rem; }
-				a { color: var(--accent); }
-				p { margin: .5rem 0; }
-				.muted { color: var(--muted); }
-				.small { font-size: .875rem; }
-				.error { color: var(--warn); }
-				.ok { color: var(--ok); }
-				.card { background: var(--card); border: 1px solid var(--line); border-radius: .75rem; padding: 1rem 1.25rem; margin: 1rem 0; }
-				.row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-				.pill { display: inline-block; padding: .35rem .75rem; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; color: var(--fg); }
-				.pill.active { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-				.day { margin: 1.25rem 0 .5rem; font-weight: 600; }
-				.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: .5rem; }
-				.slots a { text-align: center; padding: .5rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--card); text-decoration: none; color: var(--fg); font-variant-numeric: tabular-nums; }
-				.slots a:hover { border-color: var(--accent); }
-				.busy { color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
-				label { display: block; margin: .75rem 0 .25rem; font-weight: 500; }
-				label.inline { display: inline-flex; gap: .35rem; align-items: center; font-weight: 400; margin: .25rem .75rem .25rem 0; }
-				input[type=text], input[type=number], input[type=date], input[type=password], textarea, select { font: inherit; width: 100%; padding: .5rem .65rem; border: 1px solid var(--line); border-radius: .5rem; background: var(--card); color: var(--fg); }
-				textarea { min-height: 5rem; }
-				button, .button { font: inherit; display: inline-block; padding: .55rem 1rem; background: var(--accent); color: var(--accent-fg); border: 0; border-radius: .5rem; cursor: pointer; text-decoration: none; }
-				button.secondary, .button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); }
-				button.danger { background: transparent; color: var(--warn); border: 1px solid var(--line); }
-				form.inline { display: inline; }
-				table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-				td, th { text-align: left; padding: .5rem .4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-				.link-box { display: flex; gap: .5rem; } .link-box input { flex: 1; font-family: ui-monospace, monospace; font-size: .85rem; }
-				.table-wrap { overflow-x: auto; }
-			</style>
-		</head>
+		@head(title, accent)
 		<body>
-			<main>
-				{ children... }
-			</main>
+			{ children... }
 		</body>
 	</html>
+}
+
+templ guestHeader(width string) {
+	<header class={ "g-head", width }>
+		@logoMark(26, false)
+		<span class="wordmark">hima</span>
+	</header>
 }
 
 // detectTimezone reloads the page with the browser's time zone as ?tz= when
@@ -66,4 +61,30 @@ templ detectTimezone() {
 			location.replace(u);
 		})();
 	</script>
+}
+
+templ copyScript() {
+	<script>
+		document.addEventListener("click", function (e) {
+			var b = e.target.closest("[data-copy]");
+			if (!b) return;
+			var input = document.getElementById(b.getAttribute("data-copy"));
+			navigator.clipboard.writeText(input.value).then(function () {
+				var label = b.querySelector("[data-label]");
+				if (label) label.textContent = "Copied";
+			});
+		});
+	</script>
+}
+
+// copyRow is a read-only field with a Copy button.
+templ copyRow(id, label, value, buttonClass string) {
+	<div class="copy-row">
+		<label for={ id } class="sr-only">{ label }</label>
+		<input id={ id } class="input" readonly value={ value } onclick="this.select()"/>
+		<button type="button" class={ "btn", buttonClass } data-copy={ id }>
+			@iconCopy(16)
+			<span data-label>Copy</span>
+		</button>
+	</div>
 }

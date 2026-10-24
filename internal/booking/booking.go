@@ -98,6 +98,7 @@ func (s *Service) when(b store.Booking) string {
 type NewInvite struct {
 	Label                string
 	Location             string
+	LocationKind         string
 	Durations            []time.Duration
 	MaxUses              int
 	ExpiresIn            time.Duration
@@ -119,6 +120,9 @@ func (s *Service) CreateInvite(ctx context.Context, n NewInvite) (store.Invite, 
 	if n.MaxUses < 1 {
 		return store.Invite{}, "", &InputError{"An invite needs at least one use."}
 	}
+	if !store.ValidLocationKind(n.LocationKind) {
+		return store.Invite{}, "", &InputError{"Pick a kind of location."}
+	}
 	if n.ExpiresIn <= 0 {
 		return store.Invite{}, "", &InputError{"An invite must expire in the future."}
 	}
@@ -127,15 +131,16 @@ func (s *Service) CreateInvite(ctx context.Context, n NewInvite) (store.Invite, 
 	}
 	now := s.Now()
 	inv := store.Invite{
-		Label:      strings.TrimSpace(n.Label),
-		Location:   strings.TrimSpace(n.Location),
-		Durations:  n.Durations,
-		MaxUses:    n.MaxUses,
-		ExpiresAt:  now.Add(n.ExpiresIn),
-		RangeStart: n.RangeStart,
-		RangeEnd:   n.RangeEnd,
-		ShowBusy:   n.ShowBusy,
-		CreatedAt:  now,
+		Label:        strings.TrimSpace(n.Label),
+		Location:     strings.TrimSpace(n.Location),
+		LocationKind: n.LocationKind,
+		Durations:    n.Durations,
+		MaxUses:      n.MaxUses,
+		ExpiresAt:    now.Add(n.ExpiresIn),
+		RangeStart:   n.RangeStart,
+		RangeEnd:     n.RangeEnd,
+		ShowBusy:     n.ShowBusy,
+		CreatedAt:    now,
 	}
 	tok := token.New()
 	id, err := s.Store.CreateInvite(ctx, inv, token.Hash(tok))
@@ -265,14 +270,15 @@ func (s *Service) Book(ctx context.Context, tok string, start time.Time, d time.
 	}
 
 	b := store.Booking{
-		InviteID:    inv.ID,
-		InviteLabel: inv.Label,
-		GuestName:   g.Name,
-		Note:        g.Note,
-		Location:    inv.Location,
-		Start:       start,
-		End:         start.Add(d),
-		CreatedAt:   s.Now(),
+		InviteID:     inv.ID,
+		InviteLabel:  inv.Label,
+		GuestName:    g.Name,
+		Note:         g.Note,
+		Location:     inv.Location,
+		LocationKind: inv.LocationKind,
+		Start:        start,
+		End:          start.Add(d),
+		CreatedAt:    s.Now(),
 	}
 	manage := token.New()
 	b.ID, err = s.Store.CreateBooking(ctx, b, token.Hash(manage), s.Availability.Buffer, s.Now())
@@ -386,7 +392,7 @@ func (s *Service) Reschedule(ctx context.Context, tok string, start time.Time) (
 		return store.Booking{}, err
 	}
 	b := m.Booking
-	b.Start, b.End, b.Sequence = start, start.Add(d), b.Sequence+1
+	b.Start, b.End, b.Sequence, b.Reschedules = start, start.Add(d), b.Sequence+1, b.Reschedules+1
 	s.notify(ctx, notify.Rescheduled, b.GuestName+" rescheduled", s.when(m.Booking)+" → "+s.when(b), b)
 	return b, nil
 }
