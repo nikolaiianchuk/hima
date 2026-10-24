@@ -67,8 +67,10 @@ func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message s
 		return
 	}
 	var attachment *notify.Attachment
-	if kind == notify.Booked {
-		// Offered to channels that support it; ntfy uses it when attach_ics is on.
+	if kind == notify.Booked || kind == notify.Rescheduled {
+		// Offered to channels that support it; ntfy uses it when attach_ics is
+		// on. After a reschedule, some calendars update the event (same UID,
+		// higher SEQUENCE) while others add a second one; that is accepted.
 		if data, err := s.ownerICS(b); err == nil {
 			attachment = &notify.Attachment{Filename: "booking.ics", Data: data}
 		}

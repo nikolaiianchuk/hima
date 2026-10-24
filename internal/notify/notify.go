@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -68,8 +70,8 @@ type NtfyConfig struct {
 	URL string
 	// Token is an optional access token for protected topics.
 	Token string
-	// AttachICS sends a Booking's .ics as a file with new-Booking
-	// notifications. Needs a server with attachments enabled; otherwise the
+	// AttachICS sends a Booking's .ics as a file with new-Booking and
+	// reschedule notifications. Needs a server with attachments enabled; otherwise the
 	// plain notification is sent instead.
 	AttachICS bool
 }
@@ -221,9 +223,10 @@ func do(c *http.Client, req *http.Request) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return &statusError{code: resp.StatusCode, status: resp.Status}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return &statusError{code: resp.StatusCode, status: resp.Status, body: strings.TrimSpace(string(body))}
 	}
 	return nil
 }
@@ -231,6 +234,12 @@ func do(c *http.Client, req *http.Request) error {
 type statusError struct {
 	code   int
 	status string
+	body   string // start of the response, e.g. ntfy's JSON error
 }
 
-func (e *statusError) Error() string { return "HTTP " + e.status }
+func (e *statusError) Error() string {
+	if e.body == "" {
+		return "HTTP " + e.status
+	}
+	return "HTTP " + e.status + ": " + e.body
+}

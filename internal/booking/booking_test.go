@@ -366,3 +366,25 @@ func TestBookedEventCarriesICS(t *testing.T) {
 		}
 	}
 }
+
+func TestRescheduleEventCarriesUpdatedICS(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{})
+	_, manage, _ := e.Book(ctx, tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+	e.Reschedule(ctx, manage, at("2026-10-27 11:00"))
+	e.CancelByGuest(ctx, manage)
+
+	att := e.events.events[1].Attachment
+	if att == nil {
+		t.Fatal("reschedule has no attachment")
+	}
+	for _, want := range []string{"UID:booking-1@hima.example.com", "SEQUENCE:1", "DTSTART:20261027T110000Z"} {
+		if !strings.Contains(string(att.Data), want) {
+			t.Errorf("ics missing %q", want)
+		}
+	}
+	if e.events.events[2].Attachment != nil {
+		t.Error("cancellation should not carry an attachment")
+	}
+}

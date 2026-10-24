@@ -56,7 +56,7 @@ notifications:
   ntfy:
     url: ""               # e.g. https://ntfy.sh/pick-a-long-random-topic
     token: ""             # for protected topics
-    attach_ics: false     # attach the .ics to new-booking pushes (tap to add to
+    attach_ics: false     # attach the .ics to booking/reschedule pushes (tap to add to
                           # your calendar); needs attachments enabled on the server
   webhook:
     url: ""               # receives a JSON POST per event

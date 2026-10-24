@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -173,5 +174,17 @@ func TestNtfyFallsBackWhenAttachmentRefused(t *testing.T) {
 	d.Wait(context.Background())
 	if len(bodies) != 2 || bodies[0] != "ICS" || bodies[1] != "plain" {
 		t.Errorf("requests = %q, want attachment then plain fallback", bodies)
+	}
+}
+
+func TestStatusErrorIncludesBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"attachments not allowed"}`, http.StatusBadRequest)
+	}))
+	t.Cleanup(srv.Close)
+	req, _ := http.NewRequest("POST", srv.URL, nil)
+	err := do(http.DefaultClient, req)
+	if err == nil || !strings.Contains(err.Error(), "attachments not allowed") {
+		t.Errorf("err = %v", err)
 	}
 }
