@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/token"
@@ -52,6 +53,29 @@ type Service struct {
 	Availability schedule.Availability
 	Calendars    Calendars
 	Now          func() time.Time
+	// Notifier, if set, is told about Bookings, reschedules and Cancellations.
+	Notifier notify.Notifier
+}
+
+func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message string, b store.Booking) {
+	if s.Notifier == nil {
+		return
+	}
+	s.Notifier.Notify(ctx, notify.Event{
+		Kind:    kind,
+		At:      s.Now(),
+		Title:   title,
+		Message: message,
+		Booking: &notify.BookingInfo{
+			GuestName: b.GuestName, Note: b.Note, Location: b.Location,
+			InviteLabel: b.InviteLabel, Start: b.Start, End: b.End,
+		},
+		Silent: kind == notify.CancelledByOwner,
+	})
+}
+
+func (s *Service) when(b store.Booking) string {
+	return schedule.FormatRange(b.Start, b.End, s.Availability.Location)
 }
 
 // NewInvite is what the Owner fills in to create an Invite.
@@ -244,6 +268,14 @@ func (s *Service) Book(ctx context.Context, tok string, start time.Time, d time.
 	case err != nil:
 		return store.Booking{}, "", err
 	}
+	msg := s.when(b)
+	if b.Note != "" {
+		msg += " · “" + b.Note + "”"
+	}
+	if b.InviteLabel != "" {
+		msg += " · via " + b.InviteLabel
+	}
+	s.notify(ctx, notify.Booked, "New booking: "+b.GuestName, msg, b)
 	return b, manage, nil
 }
 
@@ -303,7 +335,11 @@ func (s *Service) CancelByGuest(ctx context.Context, tok string) error {
 	if !m.Changeable {
 		return ErrLocked
 	}
-	return s.Store.CancelBooking(ctx, m.ID, store.CancelledByGuest, s.Now())
+	if err := s.Store.CancelBooking(ctx, m.ID, store.CancelledByGuest, s.Now()); err != nil {
+		return err
+	}
+	s.notify(ctx, notify.CancelledByGuest, m.GuestName+" cancelled", s.when(m.Booking), m.Booking)
+	return nil
 }
 
 // RescheduleSlots lists times the Booking behind tok can move to: same
@@ -335,6 +371,7 @@ func (s *Service) Reschedule(ctx context.Context, tok string, start time.Time) (
 	}
 	b := m.Booking
 	b.Start, b.End, b.Sequence = start, start.Add(d), b.Sequence+1
+	s.notify(ctx, notify.Rescheduled, b.GuestName+" rescheduled", s.when(m.Booking)+" → "+s.when(b), b)
 	return b, nil
 }
 
@@ -347,5 +384,9 @@ func (s *Service) CancelByOwner(ctx context.Context, id int64) error {
 	if b.Cancelled() {
 		return ErrLocked
 	}
-	return s.Store.CancelBooking(ctx, id, store.CancelledByOwner, s.Now())
+	if err := s.Store.CancelBooking(ctx, id, store.CancelledByOwner, s.Now()); err != nil {
+		return err
+	}
+	s.notify(ctx, notify.CancelledByOwner, "You cancelled "+b.GuestName+"'s booking", s.when(b), b)
+	return nil
 }

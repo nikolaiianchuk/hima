@@ -69,6 +69,24 @@ func (s *Server) renderAdmin(w http.ResponseWriter, r *http.Request, status int,
 		Error:     errMsg,
 		Form:      form,
 	}
+	if since, err := s.svc.FeedCreatedAt(ctx); err != nil {
+		s.fail(w, r, err)
+		return
+	} else if !since.IsZero() {
+		page.FeedSince = dayLabel(since.In(loc))
+	}
+	activity, err := s.store.RecentActivity(ctx, 20)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	for _, a := range activity {
+		page.Activity = append(page.Activity, views.ActivityItem{
+			When:    dayLabel(a.At.In(loc)) + " " + clockLabel(a.At.In(loc)),
+			Title:   a.Title,
+			Message: a.Message,
+		})
+	}
 	if _, err := s.svc.Calendars.Busy(now, now.Add(time.Minute)); err != nil {
 		page.Warning = "Your calendars couldn't be read recently, so guests currently see no free times."
 	}

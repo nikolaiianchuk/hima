@@ -39,7 +39,15 @@ type NewInviteForm struct {
 	ShowBusy      bool
 }
 
+type ActivityItem struct {
+	When    string
+	Title   string
+	Message string
+}
+
 type AdminPage struct {
+	FeedSince string
+	Activity  []ActivityItem
 	OwnerName string
 	TZ        string
 	CanLogout bool
@@ -136,6 +144,20 @@ templ Admin(p AdminPage) {
 				</table>
 			</div>
 		}
+		<h2>Your calendar</h2>
+		<div class="card">
+			if p.FeedSince != "" {
+				<p>Your bookings feed is active (link created { p.FeedSince }).</p>
+				<form method="post" action="/admin/feed" onsubmit="return confirm('Create a new link? The old one stops working, so you will need to re-subscribe.')">
+					<button type="submit" class="secondary">New feed link</button>
+				</form>
+			} else {
+				<p>Subscribe to a feed of your bookings so they show up in your own calendar.</p>
+				<form method="post" action="/admin/feed">
+					<button type="submit">Create feed link</button>
+				</form>
+			}
+		</div>
 		<h2>Invites</h2>
 		if len(p.Invites) == 0 {
 			<p class="muted">No invites yet.</p>
@@ -164,6 +186,26 @@ templ Admin(p AdminPage) {
 				</table>
 			</div>
 		}
+		<h2>Activity</h2>
+		if len(p.Activity) == 0 {
+			<p class="muted">Nothing yet.</p>
+		} else {
+			<div class="table-wrap">
+				<table>
+					for _, a := range p.Activity {
+						<tr>
+							<td class="small muted" style="white-space:nowrap">{ a.When }</td>
+							<td>
+								{ a.Title }
+								if a.Message != "" {
+									<div class="small muted">{ a.Message }</div>
+								}
+							</td>
+						</tr>
+					}
+				</table>
+			</div>
+		}
 	}
 }
 
@@ -183,6 +225,18 @@ templ InviteCreated(p InviteCreatedPage) {
 			<p>Send this link to your guest. <strong>It's shown only once</strong>; revoke and create a new one if you lose it.</p>
 			@copyBox(p.URL)
 			<p class="small muted">{ p.Summary }</p>
+		</div>
+		<p><a href="/admin/">← Back</a></p>
+	}
+}
+
+templ FeedCreated(url string) {
+	@layout("Feed link") {
+		<h1>Your bookings feed</h1>
+		<div class="card">
+			<p>Subscribe to this link in your calendar app (Google: <em>Other calendars → From URL</em>; Apple: <em>File → New Calendar Subscription</em>). <strong>It's shown only once.</strong></p>
+			@copyBox(url)
+			<p class="small muted">Keep it private: anyone with the link can see your bookings. Google refreshes subscriptions slowly (up to a day); Apple and Fastmail are faster.</p>
 		</div>
 		<p><a href="/admin/">← Back</a></p>
 	}

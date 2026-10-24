@@ -99,14 +99,15 @@ func (c *Cache) RefreshIfOlder(ctx context.Context, age time.Duration) error {
 	return c.Refresh(ctx)
 }
 
-// Run refreshes every interval until ctx is done, reporting failures to
-// onErr (which may be nil).
-func (c *Cache) Run(ctx context.Context, interval time.Duration, onErr func(error)) {
+// Run refreshes every interval until ctx is done, reporting each outcome
+// (nil on success) to onResult, which may be nil.
+func (c *Cache) Run(ctx context.Context, interval time.Duration, onResult func(error)) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
-		if err := c.Refresh(ctx); err != nil && onErr != nil && ctx.Err() == nil {
-			onErr(err)
+		err := c.Refresh(ctx)
+		if onResult != nil && ctx.Err() == nil {
+			onResult(err)
 		}
 		select {
 		case <-ctx.Done():

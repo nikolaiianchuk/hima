@@ -22,14 +22,26 @@ type Event struct {
 	Stamp     time.Time
 }
 
-// Write encodes events as an iCalendar file.
+// Write encodes events as an iCalendar file. A non-empty name marks it as a
+// subscribable feed: it gets a display name and a refresh hint.
 func Write(w io.Writer, name string, events ...Event) error {
 	cal := ical.NewCalendar()
 	cal.Props.SetText(ical.PropVersion, "2.0")
 	cal.Props.SetText(ical.PropProductID, "-//hima//hima//EN")
 	cal.Props.SetText(ical.PropCalendarScale, "GREGORIAN")
 	if name != "" {
-		cal.Props.SetText("X-WR-CALNAME", name)
+		calName := ical.NewProp("X-WR-CALNAME")
+		calName.SetText(name)
+		calName.Params.Del(ical.ParamValue) // clients expect it bare
+		cal.Props.Set(calName)
+		for _, key := range []string{ical.PropRefreshInterval, "X-PUBLISHED-TTL"} {
+			p := ical.NewProp(key)
+			// RFC 7986 requires VALUE=DURATION on REFRESH-INTERVAL; set it
+			// directly because SetValueType drops it for default types.
+			p.Params.Set(ical.ParamValue, string(ical.ValueDuration))
+			p.Value = "PT15M"
+			cal.Props.Set(p)
+		}
 	}
 	for _, e := range events {
 		ev := ical.NewEvent()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nikolaiianchuk/hima/internal/calsource"
+	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
 )
@@ -36,10 +37,15 @@ func (f *fakeCalendars) Busy(from, to time.Time) ([]schedule.Interval, error) {
 
 func (f *fakeCalendars) RefreshIfOlder(context.Context, time.Duration) error { return nil }
 
+type fakeNotifier struct{ events []notify.Event }
+
+func (f *fakeNotifier) Notify(_ context.Context, ev notify.Event) { f.events = append(f.events, ev) }
+
 type env struct {
 	*Service
-	cals *fakeCalendars
-	now  time.Time
+	cals   *fakeCalendars
+	events *fakeNotifier
+	now    time.Time
 }
 
 // newEnv starts on Sunday 2026-10-25 09:00 with Availability Mon–Fri
@@ -55,7 +61,7 @@ func newEnv(t *testing.T) *env {
 	for d := time.Monday; d <= time.Friday; d++ {
 		weekly[d] = []schedule.DayRange{{From: 10 * 60, To: 12 * 60}}
 	}
-	e := &env{cals: &fakeCalendars{}, now: at("2026-10-25 09:00")}
+	e := &env{cals: &fakeCalendars{}, events: &fakeNotifier{}, now: at("2026-10-25 09:00")}
 	e.Service = &Service{
 		Store: st,
 		Availability: schedule.Availability{
@@ -64,6 +70,7 @@ func newEnv(t *testing.T) *env {
 		},
 		Calendars: e.cals,
 		Now:       func() time.Time { return e.now },
+		Notifier:  e.events,
 	}
 	return e
 }
@@ -295,5 +302,48 @@ func TestBusyBlocksOnlyWhenOptedIn(t *testing.T) {
 	inv, _ = e.Invite(ctx, shown)
 	if b, _ := e.BusyBlocks(ctx, inv); len(b) != 1 {
 		t.Errorf("got %d busy blocks, want 1 (none beyond the invite's range)", len(b))
+	}
+}
+
+func TestNotifications(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{Label: "for Alex", MaxUses: 2})
+	b, manage, _ := e.Book(ctx, tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+	e.Reschedule(ctx, manage, at("2026-10-27 11:00"))
+	e.CancelByGuest(ctx, manage)
+	b2, _, _ := e.Book(ctx, tok, at("2026-10-28 10:00"), 30*time.Minute, GuestDetails{Name: "Maria"})
+	e.CancelByOwner(ctx, b2.ID)
+	_ = b
+
+	want := []struct {
+		kind    notify.Kind
+		title   string
+		message string
+		silent  bool
+	}{
+		{notify.Booked, "New booking: Alex", "Mon 26 Oct, 10:00–10:30 · “catch-up” · via for Alex", false},
+		{notify.Rescheduled, "Alex rescheduled", "Mon 26 Oct, 10:00–10:30 → Tue 27 Oct, 11:00–11:30", false},
+		{notify.CancelledByGuest, "Alex cancelled", "Tue 27 Oct, 11:00–11:30", false},
+		{notify.Booked, "New booking: Maria", "Wed 28 Oct, 10:00–10:30 · via for Alex", false},
+		{notify.CancelledByOwner, "You cancelled Maria's booking", "Wed 28 Oct, 10:00–10:30", true},
+	}
+	if len(e.events.events) != len(want) {
+		t.Fatalf("got %d events: %+v", len(e.events.events), e.events.events)
+	}
+	for i, w := range want {
+		got := e.events.events[i]
+		if got.Kind != w.kind || got.Title != w.title || got.Message != w.message || got.Silent != w.silent || got.Booking == nil {
+			t.Errorf("event %d = %+v, want %+v", i, got, w)
+		}
+	}
+}
+
+func TestFailedBookingDoesNotNotify(t *testing.T) {
+	e := newEnv(t)
+	tok := e.invite(t, NewInvite{})
+	e.Book(context.Background(), tok, at("2026-10-26 10:10"), 30*time.Minute, alex)
+	if len(e.events.events) != 0 {
+		t.Errorf("events: %+v", e.events.events)
 	}
 }

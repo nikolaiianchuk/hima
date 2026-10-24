@@ -51,7 +51,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /b/{token}/cancel", s.handleGuestCancel)
 	mux.HandleFunc("GET /b/{token}/reschedule", s.handleRescheduleForm)
 	mux.HandleFunc("POST /b/{token}/reschedule", s.handleReschedule)
-	mux.HandleFunc("GET /feed/{token}", s.handleNotFound) // Owner feed
+	mux.HandleFunc("GET /feed/{token}", s.handleFeed)
 
 	// Admin.
 	if s.cfg.Auth.Mode == config.AuthModePassword {
@@ -63,6 +63,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("POST /admin/invites", s.requireOwner(http.HandlerFunc(s.handleCreateInvite)))
 	mux.Handle("POST /admin/invites/{id}/revoke", s.requireOwner(http.HandlerFunc(s.handleRevokeInvite)))
 	mux.Handle("POST /admin/bookings/{id}/cancel", s.requireOwner(http.HandlerFunc(s.handleOwnerCancel)))
+	mux.Handle("POST /admin/feed", s.requireOwner(http.HandlerFunc(s.handleRotateFeed)))
 	mux.Handle("GET /{$}", http.RedirectHandler("/admin/", http.StatusFound))
 
 	mux.HandleFunc("/", s.handleNotFound)
@@ -76,7 +77,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
-		if strings.HasPrefix(r.URL.Path, "/i/") || strings.HasPrefix(r.URL.Path, "/b/") || strings.HasPrefix(r.URL.Path, "/admin") {
+		if strings.HasPrefix(r.URL.Path, "/i/") || strings.HasPrefix(r.URL.Path, "/b/") || strings.HasPrefix(r.URL.Path, "/feed/") || strings.HasPrefix(r.URL.Path, "/admin") {
 			h.Set("Cache-Control", "no-store")
 		}
 		next.ServeHTTP(w, r)
@@ -123,9 +124,9 @@ func (s *Server) baseURL(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
-// redactPath hides tokens in /i/ and /b/ paths before logging.
+// redactPath hides tokens in /i/, /b/ and /feed/ paths before logging.
 func redactPath(p string) string {
-	for _, prefix := range []string{"/i/", "/b/"} {
+	for _, prefix := range []string{"/i/", "/b/", "/feed/"} {
 		if rest, ok := strings.CutPrefix(p, prefix); ok {
 			if _, tail, found := strings.Cut(rest, "/"); found {
 				return prefix + "…/" + tail

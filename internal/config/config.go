@@ -30,6 +30,7 @@ type Config struct {
 
 	AvailabilityConfig AvailabilityConfig `yaml:"availability"`
 	InviteDefaults     InviteDefaults     `yaml:"invite_defaults"`
+	Notifications      Notifications      `yaml:"notifications"`
 	// Calendars are the Calendar sources whose events are Busy blocks.
 	Calendars []CalendarConfig `yaml:"calendars"`
 }
@@ -92,6 +93,9 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.Auth.Mode, "HIMA_AUTH_MODE")
 	set(&c.Auth.ProxyHeader, "HIMA_AUTH_PROXY_HEADER")
 	set(&c.Auth.PasswordHash, "HIMA_AUTH_PASSWORD_HASH")
+	set(&c.Notifications.Ntfy.URL, "HIMA_NTFY_URL")
+	set(&c.Notifications.Ntfy.Token, "HIMA_NTFY_TOKEN")
+	set(&c.Notifications.Webhook.URL, "HIMA_WEBHOOK_URL")
 }
 
 func (c *Config) applyDefaults() {
@@ -131,6 +135,11 @@ func (c *Config) Validate() error {
 	if err := c.InviteDefaults.validate(); err != nil {
 		return err
 	}
+	for name, u := range map[string]string{"notifications.ntfy.url": c.Notifications.Ntfy.URL, "notifications.webhook.url": c.Notifications.Webhook.URL} {
+		if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
+			return fmt.Errorf("%s must be an http(s) URL", name)
+		}
+	}
 	for i, cal := range c.Calendars {
 		if !strings.HasPrefix(cal.URL, "https://") && !strings.HasPrefix(cal.URL, "http://") {
 			return fmt.Errorf("calendars[%d].url must be an http(s) URL (webcal:// links: replace webcal with https)", i)
@@ -169,4 +178,17 @@ func (d InviteDefaults) validate() error {
 		}
 	}
 	return nil
+}
+
+// Notifications tell the Owner about Bookings, reschedules, Guest
+// Cancellations and failing Calendar sources.
+type Notifications struct {
+	Ntfy struct {
+		// URL is the full topic URL, e.g. https://ntfy.sh/some-secret-topic.
+		URL   string `yaml:"url"`
+		Token string `yaml:"token"`
+	} `yaml:"ntfy"`
+	Webhook struct {
+		URL string `yaml:"url"`
+	} `yaml:"webhook"`
 }

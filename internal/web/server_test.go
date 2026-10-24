@@ -19,6 +19,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/booking"
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
+	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
 )
@@ -62,6 +63,7 @@ func newTestServer(t *testing.T, auth config.Auth) *testServer {
 		Availability: schedule.Availability{Location: lisbon, Weekly: weekly, Horizon: 14 * 24 * time.Hour, Step: 30 * time.Minute},
 		Calendars:    cals,
 		Now:          func() time.Time { return now },
+		Notifier:     &notify.Dispatcher{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))},
 	}
 	cfg := &config.Config{Owner: config.Owner{Name: "Nikolai"}, Auth: auth}
 	cfg.InviteDefaults = config.InviteDefaults{ExpiresInDays: 7, MaxUses: 1, Durations: []time.Duration{30 * time.Minute}}
@@ -334,4 +336,63 @@ func TestRedactPath(t *testing.T) {
 			t.Errorf("redactPath(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+var feedLinkRe = regexp.MustCompile(`value="https?://[^"/]+(/feed/[A-Za-z0-9_-]{22}\.ics)"`)
+
+func (ts *testServer) book(t *testing.T, name string) string {
+	t.Helper()
+	_, body, _ := ts.post(t, "/admin/invites", url.Values{"label": {"for " + name}, "durations": {"30"}, "max_uses": {"1"}, "expires_in_days": {"7"}})
+	invite := first(t, inviteLinkRe, body)
+	_, body, _ = ts.get(t, invite+"?tz=Europe/Lisbon")
+	_, body, _ = ts.get(t, first(t, slotLinkRe, body))
+	_, _, h := ts.post(t, invite, url.Values{"start": {first(t, startRe, body)}, "d": {"30"}, "tz": {"Europe/Lisbon"}, "name": {name}, "note": {"hello"}})
+	return strings.SplitN(h.Get("Location"), "?", 2)[0]
+}
+
+func TestOwnerFeed(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	_, body, _ := ts.get(t, "/admin/")
+	mustContain(t, body, "Create feed link")
+
+	manage := ts.book(t, "Alex")
+	ts.post(t, manage+"/cancel", nil)
+	ts.book(t, "Maria")
+
+	_, body, _ = ts.post(t, "/admin/feed", nil)
+	feed := first(t, feedLinkRe, body)
+
+	status, body, h := ts.get(t, feed)
+	if status != http.StatusOK || !strings.HasPrefix(h.Get("Content-Type"), "text/calendar") {
+		t.Fatalf("feed: %d %s", status, h.Get("Content-Type"))
+	}
+	mustContain(t, body, "X-WR-CALNAME:hima: bookings with Nikolai", "REFRESH-INTERVAL;VALUE=DURATION:PT15M",
+		"SUMMARY:Alex ↔ Nikolai: hello", "STATUS:CANCELLED", "SUMMARY:Maria ↔ Nikolai: hello", "Booked via invite: for Maria")
+
+	// Without the .ics suffix works too; a wrong token does not.
+	if status, _, _ := ts.get(t, strings.TrimSuffix(feed, ".ics")); status != http.StatusOK {
+		t.Errorf("feed without suffix: %d", status)
+	}
+	if status, _, _ := ts.get(t, "/feed/AAAAAAAAAAAAAAAAAAAAAA.ics"); status != http.StatusNotFound {
+		t.Errorf("wrong token: %d", status)
+	}
+
+	// A new link invalidates the old one.
+	_, body, _ = ts.post(t, "/admin/feed", nil)
+	if status, _, _ := ts.get(t, feed); status != http.StatusNotFound {
+		t.Errorf("old feed after rotation: %d", status)
+	}
+	if status, _, _ := ts.get(t, first(t, feedLinkRe, body)); status != http.StatusOK {
+		t.Errorf("new feed: %d", status)
+	}
+	_, body, _ = ts.get(t, "/admin/")
+	mustContain(t, body, "feed is active")
+}
+
+func TestActivityLog(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	manage := ts.book(t, "Alex")
+	ts.post(t, manage+"/cancel", nil)
+	_, body, _ := ts.get(t, "/admin/")
+	mustContain(t, body, "New booking: Alex", "Alex cancelled")
 }

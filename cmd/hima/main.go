@@ -26,6 +26,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/ics"
+	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/store"
 	"github.com/nikolaiianchuk/hima/internal/web"
 )
@@ -72,11 +73,23 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	notifier := &notify.Dispatcher{
+		Store:   st,
+		Webhook: cfg.Notifications.Webhook.URL,
+		Client:  &http.Client{Timeout: 15 * time.Second},
+		Log:     log,
+		Backoff: []time.Duration{2 * time.Second, 10 * time.Second, 30 * time.Second},
+	}
+	if n := cfg.Notifications.Ntfy; n.URL != "" {
+		notifier.Ntfy = &notify.NtfyConfig{URL: n.URL, Token: n.Token}
+	}
+	if cfg.BaseURL != "" {
+		notifier.ClickURL = cfg.BaseURL + "/admin/"
+	}
+
 	cals := calsource.New(cfg.Sources(), ics.Options{Location: avail.Location, OwnerEmails: cfg.Owner.Emails}, nil)
-	go cals.Run(ctx, 5*time.Minute, func(err error) {
-		log.Warn("calendar source refresh failed", "err", err)
-	})
-	svc := &booking.Service{Store: st, Availability: avail, Calendars: cals, Now: time.Now}
+	go cals.Run(ctx, 5*time.Minute, calendarWatcher(ctx, log, notifier))
+	svc := &booking.Service{Store: st, Availability: avail, Calendars: cals, Now: time.Now, Notifier: notifier}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -99,7 +112,32 @@ func run(log *slog.Logger) error {
 	if err := srv.Shutdown(shutdownCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	notifier.Wait(shutdownCtx)
 	return nil
+}
+
+// calendarWatcher logs every failed Calendar source refresh, but notifies the
+// Owner only when sources start failing and when they recover.
+func calendarWatcher(ctx context.Context, log *slog.Logger, n notify.Notifier) func(error) {
+	failing := false
+	return func(err error) {
+		switch {
+		case err != nil && !failing:
+			failing = true
+			log.Warn("calendar source refresh failed", "err", err)
+			n.Notify(ctx, notify.Event{
+				Kind:    notify.CalendarFailing,
+				At:      time.Now(),
+				Title:   "A calendar can't be read",
+				Message: err.Error() + "\nGuests will see no free times if this lasts over an hour.",
+			})
+		case err != nil:
+			log.Warn("calendar source refresh failed", "err", err)
+		case failing:
+			failing = false
+			n.Notify(ctx, notify.Event{Kind: notify.CalendarRecovered, At: time.Now(), Title: "Calendars are readable again"})
+		}
+	}
 }
 
 // hashPassword reads a password (hidden on a terminal, or one line from a pipe)

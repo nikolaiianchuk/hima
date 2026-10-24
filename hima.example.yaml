@@ -49,6 +49,16 @@ invite_defaults:
   durations: [30m]        # offer several, e.g. [30m, 1h]
   location: ""            # e.g. a Jitsi link or "Café Nicola"
 
+# Where to tell you about new bookings, reschedules, cancellations and
+# calendars that can't be read. Both are optional; everything also appears
+# in the admin's activity log.
+notifications:
+  ntfy:
+    url: ""               # e.g. https://ntfy.sh/pick-a-long-random-topic
+    token: ""             # for protected topics
+  webhook:
+    url: ""               # receives a JSON POST per event
+
 # Calendar sources: private ICS URLs. Everything in them counts as busy,
 # except events marked "free". (For webcal:// links, use https:// instead.)
 calendars:

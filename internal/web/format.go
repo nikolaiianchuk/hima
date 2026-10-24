@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"time"
+
+	"github.com/nikolaiianchuk/hima/internal/schedule"
 )
 
 // commonZones are offered in the Guest's time zone picker; the detected or
@@ -43,11 +45,7 @@ func clockLabel(t time.Time) string { return t.Format("15:04") }
 
 // whenLabel formats a time range in loc, e.g. "Mon 26 Oct, 10:00–10:30".
 func whenLabel(start, end time.Time, loc *time.Location) string {
-	s, e := start.In(loc), end.In(loc)
-	if s.YearDay() == e.YearDay() || e.Sub(s) < 24*time.Hour && e.Hour() == 0 && e.Minute() == 0 {
-		return fmt.Sprintf("%s, %s–%s", dayLabel(s), clockLabel(s), clockLabel(e))
-	}
-	return fmt.Sprintf("%s %s – %s %s", dayLabel(s), clockLabel(s), dayLabel(e), clockLabel(e))
+	return schedule.FormatRange(start, end, loc)
 }
 
 // timeRangeLabel is whenLabel without the day when the range stays within
