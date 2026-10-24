@@ -17,6 +17,7 @@
 ## Install
 
 - **[With Docker and Caddy](docs/install-caddy.md)**: recommended; HTTPS, admin protection and backups included.
+- **[Full self-hosted stack: Caddy + Authentik + ntfy](docs/install-caddy-authentik-ntfy.md)**: single sign-on for the admin and your own push server.
 
 hima needs `auth.mode` set and refuses to start without it:
 
@@ -51,6 +52,7 @@ Generated `*_templ.go` files are committed so `go build` works without running `
 ## Docs
 
 - [Install with Caddy](docs/install-caddy.md)
+- [Self-host with Caddy, Authentik and ntfy](docs/install-caddy-authentik-ntfy.md)
 - [CONTEXT.md](CONTEXT.md): glossary
 - [docs/adr](docs/adr): architecture decisions
 - [docs/roadmap.md](docs/roadmap.md): MVP and later phases

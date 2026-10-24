@@ -129,6 +129,8 @@ hima.example.com {
 
 ### Option B: single sign-on (Authelia, Authentik, …)
 
+> For a complete walkthrough with Authentik and a self-hosted ntfy, see [install-caddy-authentik-ntfy.md](install-caddy-authentik-ntfy.md).
+
 If you already run an SSO portal, let it guard the admin and pass your user name to hima. With Authelia:
 
 ```caddy
