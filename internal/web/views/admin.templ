@@ -827,20 +827,30 @@ func swatchStyle(hex string) templ.SafeCSS {
 
 // ---------- Login ----------
 
-templ Login(failed bool, accent string) {
+templ Login(failed, askCode bool, accent string) {
 	@guestLayout("Log in", accent) {
 		<div class="centered">
 			<main>
 				@logoMark(56, false)
 				<h1>Log in to hima</h1>
 				if failed {
-					<p class="error" role="alert">Wrong password.</p>
+					if askCode {
+						<p class="error" role="alert">Wrong password or code.</p>
+					} else {
+						<p class="error" role="alert">Wrong password.</p>
+					}
 				}
 				<form method="post" action="/admin/login" class="stack gap-12">
 					<div class="field">
 						<label for="password">Password</label>
 						<input id="password" class="input input-lg" type="password" name="password" autocomplete="current-password" autofocus required/>
 					</div>
+					if askCode {
+						<div class="field">
+							<label for="code">Code from your authenticator app</label>
+							<input id="code" class="input input-lg mono" type="text" name="code" inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code" maxlength="7" required/>
+						</div>
+					}
 					<button type="submit" class="btn btn-lg btn-block">Log in</button>
 				</form>
 			</main>

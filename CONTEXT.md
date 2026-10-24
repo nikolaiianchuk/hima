@@ -49,7 +49,7 @@ The ending of a Booking before it happens, recording whether the Guest or the Ow
 _Avoid_: Deletion, guest-cancel / owner-cancel as separate terms
 
 **Write-back calendar**:
-The Owner's own CalDAV calendar that hima keeps Bookings in, adding, updating and removing them as they change.
+The one calendar of the Owner's (CalDAV, Google or Microsoft) that hima keeps Bookings in, adding, updating and removing them as they change.
 _Avoid_: Sync, target calendar, Owner feed
 
 **Owner feed**:
@@ -90,7 +90,7 @@ _Avoid_: Free time, opening
 - A **Booking** takes its **Location** from its **Invite**; the **Guest** supplies a **Guest name** and optional note, never the **Location**
 - Before booking, a **Guest** sees what kind of **Location** it is (place, phone call, video call); call details are revealed only once booked
 - Only the **Guest** reschedules a **Booking** (via the **Manage link**); the **Owner** may cancel it or edit its location and notes, but not move it
-- A **Calendar source** may be an ICS link or a CalDAV calendar; hima's own events in a **Write-back calendar** are never read back as **Busy blocks**
+- A **Calendar source** may be an ICS link, a CalDAV calendar, or Google / Microsoft free/busy; hima's own events in a **Write-back calendar** never keep a moved or cancelled **Booking**'s old time busy
 - There is exactly one **Owner feed**; Guests have no feed and get a one-off calendar file plus their **Manage link**
 - **Busy blocks** are the union of every **Calendar source**; if any source cannot be trusted as current, no **Slots** are offered
 - Events marked free, cancelled, or declined by the **Owner** in a **Calendar source** never become **Busy blocks**; all-day events do only if that source says so

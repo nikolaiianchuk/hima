@@ -23,6 +23,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/store"
+	"github.com/nikolaiianchuk/hima/internal/totp"
 	"github.com/nikolaiianchuk/hima/internal/web/views"
 )
 
@@ -55,6 +56,9 @@ type Server struct {
 	bookPerIP     *ratelimit.Limiter
 	bookPerInvite *ratelimit.Limiter
 	loginPerIP    *ratelimit.Limiter
+
+	// totp checks the second factor in password mode, if configured.
+	totp *totp.Verifier
 }
 
 func New(cfg *config.Config, st *store.Store, svc *booking.Service, log *slog.Logger) *Server {
@@ -63,6 +67,9 @@ func New(cfg *config.Config, st *store.Store, svc *booking.Service, log *slog.Lo
 		bookPerIP:     ratelimit.New(10, 6*time.Minute),
 		bookPerInvite: ratelimit.New(20, 3*time.Minute),
 		loginPerIP:    ratelimit.New(10, 90*time.Second),
+	}
+	if key, err := totp.ParseSecret(cfg.Auth.TOTPSecret); cfg.Auth.TOTPSecret != "" && err == nil {
+		s.totp = &totp.Verifier{Key: key}
 	}
 	if v, err := st.Setting(context.Background(), store.SettingAccent); err == nil && validAccent(v) {
 		s.accent = v

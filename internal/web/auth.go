@@ -52,7 +52,7 @@ func (s *Server) hasSession(r *http.Request) bool {
 }
 
 func (s *Server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, views.Login(false, s.currentAccent()))
+	s.render(w, r, http.StatusOK, views.Login(false, s.totp != nil, s.currentAccent()))
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -61,8 +61,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pw := r.PostFormValue("password")
-	if bcrypt.CompareHashAndPassword([]byte(s.cfg.Auth.PasswordHash), []byte(pw)) != nil {
-		s.render(w, r, http.StatusUnauthorized, views.Login(true, s.currentAccent()))
+	// Check both factors before answering, so a wrong code doesn't reveal a
+	// right password.
+	pwOK := bcrypt.CompareHashAndPassword([]byte(s.cfg.Auth.PasswordHash), []byte(pw)) == nil
+	codeOK := s.totp == nil || (pwOK && s.totp.Verify(r.PostFormValue("code")))
+	if !pwOK || !codeOK {
+		s.render(w, r, http.StatusUnauthorized, views.Login(true, s.totp != nil, s.currentAccent()))
 		return
 	}
 	tok := token.New()

@@ -26,6 +26,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/ratelimit"
 	"github.com/nikolaiianchuk/hima/internal/schedule"
 	"github.com/nikolaiianchuk/hima/internal/store"
+	"github.com/nikolaiianchuk/hima/internal/totp"
 	"github.com/nikolaiianchuk/hima/internal/writeback"
 )
 
@@ -730,4 +731,29 @@ func TestOAuthConnectFlow(t *testing.T) {
 	ts.post(t, "/admin/oauth/google/disconnect", nil)
 	_, body, _ = ts.get(t, "/admin/sources")
 	mustContain(t, body, "Connect Google Calendar")
+}
+
+func TestPasswordLoginWithTOTP(t *testing.T) {
+	hash, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
+	secret := totp.NewSecret()
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModePassword, PasswordHash: string(hash), TOTPSecret: secret})
+	_, body, _ := ts.get(t, "/admin/login")
+	mustContain(t, body, "Code from your authenticator app", `autocomplete="one-time-code"`)
+
+	key, _ := totp.ParseSecret(secret)
+	code := totp.Code(key, uint64(time.Now().Unix()/30))
+	if status, body, _ := ts.post(t, "/admin/login", url.Values{"password": {"secret"}, "code": {"000000"}}); status != http.StatusUnauthorized || !strings.Contains(body, "Wrong password or code.") {
+		t.Errorf("wrong code: %d", status)
+	}
+	if status, _, _ := ts.post(t, "/admin/login", url.Values{"password": {"wrong"}, "code": {code}}); status != http.StatusUnauthorized {
+		t.Errorf("wrong password with right code: %d", status)
+	}
+	status, _, h := ts.post(t, "/admin/login", url.Values{"password": {"secret"}, "code": {code}})
+	if status != http.StatusSeeOther || len((&http.Response{Header: h}).Cookies()) == 0 {
+		t.Fatalf("login: %d", status)
+	}
+	// The same code can't be used twice.
+	if status, _, _ := ts.post(t, "/admin/login", url.Values{"password": {"secret"}, "code": {code}}); status != http.StatusUnauthorized {
+		t.Errorf("replayed code: %d", status)
+	}
 }

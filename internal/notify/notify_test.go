@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"mime"
@@ -185,6 +186,48 @@ func TestStatusErrorIncludesBody(t *testing.T) {
 	req, _ := http.NewRequest("POST", srv.URL, nil)
 	err := do(http.DefaultClient, req)
 	if err == nil || !strings.Contains(err.Error(), "attachments not allowed") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestTelegram(t *testing.T) {
+	st := newStore(t)
+	var mu sync.Mutex
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if strings.HasSuffix(r.URL.Path, "/sendDocument") {
+			r.ParseMultipartForm(1 << 20)
+			f, h, _ := r.FormFile("document")
+			data, _ := io.ReadAll(f)
+			got = append(got, r.URL.Path+" "+r.FormValue("chat_id")+" "+h.Filename+" "+string(data)+" "+r.FormValue("caption"))
+			return
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		got = append(got, fmt.Sprint(r.URL.Path, " ", body["chat_id"], " ", body["text"]))
+	}))
+	defer srv.Close()
+	d := &Dispatcher{Store: st, Log: discard, Telegram: &TelegramConfig{BotToken: "123:abc", ChatID: "42", AttachICS: true, APIBase: srv.URL}}
+	d.Notify(context.Background(), Event{Kind: Booked, At: time.Now(), Title: "New booking: Zoë", Message: "Mon 26 Oct",
+		Attachment: &Attachment{Filename: "booking.ics", Data: []byte("ICS")}})
+	d.Notify(context.Background(), Event{Kind: CancelledByGuest, At: time.Now(), Title: "Zoë cancelled", Message: "Mon 26 Oct"})
+	d.Wait(context.Background())
+	mu.Lock()
+	defer mu.Unlock()
+	joined := strings.Join(got, "\n")
+	for _, want := range []string{"/bot123:abc/sendDocument 42 booking.ics ICS New booking: Zoë\nMon 26 Oct", "/bot123:abc/sendMessage 42 Zoë cancelled\nMon 26 Oct"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in\n%s", want, joined)
+		}
+	}
+}
+
+func TestTelegramErrorsHideToken(t *testing.T) {
+	d := &Dispatcher{Log: discard, Telegram: &TelegramConfig{BotToken: "123:secret", ChatID: "1", APIBase: "http://127.0.0.1:1"}}
+	err := d.sendTelegram(context.Background(), Event{Title: "x"})
+	if err == nil || strings.Contains(err.Error(), "secret") {
 		t.Errorf("err = %v", err)
 	}
 }

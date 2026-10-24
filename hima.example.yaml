@@ -27,6 +27,8 @@ auth:
 
   # password mode: generate with `hima hash-password`.
   # password_hash: $2a$10$...
+  # password mode, optional second factor: generate with `hima totp-setup`.
+  # totp_secret: JBSWY3DPEHPK3PXP...
 
 # When you can be booked. Hours are wall-clock time in `timezone`.
 availability:
@@ -61,6 +63,10 @@ notifications:
                           # your calendar); needs attachments enabled on the server
   webhook:
     url: ""               # receives a JSON POST per event
+  telegram:
+    bot_token: ""         # from @BotFather
+    chat_id: ""           # message your bot, then see https://api.telegram.org/bot<token>/getUpdates
+    attach_ics: false
 
 # Past Bookings, dead Invites and activity older than this are deleted
 # (at least 31, since Manage links work for 30 days after a meeting).
@@ -79,6 +85,20 @@ retention_days: 90
 #   read: [Personal, Work]   # omit to read every calendar, [] to read none
 #   all_day_blocks: false
 #   write: Personal          # omit to turn write-back off
+
+# Google Calendar / Microsoft 365 through your own OAuth app; see
+# docs/connect-google-microsoft.md. Connect in Admin → Calendar sources.
+# google:
+#   client_id: ""
+#   client_secret: ""
+#   read: [primary]
+#   write: primary
+# microsoft:
+#   client_id: ""
+#   client_secret: ""
+#   tenant: common
+#   read: true
+#   write: false
 
 # Calendar sources: private ICS URLs. Everything in them counts as busy,
 # except events marked "free". (For webcal:// links, use https:// instead.)

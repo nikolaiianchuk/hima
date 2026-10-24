@@ -79,11 +79,12 @@ type NtfyConfig struct {
 }
 
 type Dispatcher struct {
-	Store   *store.Store
-	Ntfy    *NtfyConfig
-	Webhook string
-	Client  *http.Client
-	Log     *slog.Logger
+	Store    *store.Store
+	Ntfy     *NtfyConfig
+	Telegram *TelegramConfig
+	Webhook  string
+	Client   *http.Client
+	Log      *slog.Logger
 	// Backoff is the wait before each retry; its length is the retry count.
 	Backoff []time.Duration
 	// ClickURL, if set, is where tapping an ntfy notification leads (the admin).
@@ -101,6 +102,9 @@ func (d *Dispatcher) Notify(ctx context.Context, ev Event) {
 	}
 	if d.Ntfy != nil && d.Ntfy.URL != "" {
 		d.deliver("ntfy", func(ctx context.Context) error { return d.sendNtfy(ctx, ev) })
+	}
+	if d.Telegram != nil && d.Telegram.BotToken != "" {
+		d.deliver("telegram", func(ctx context.Context) error { return d.sendTelegram(ctx, ev) })
 	}
 	if d.Webhook != "" {
 		d.deliver("webhook", func(ctx context.Context) error { return d.sendWebhook(ctx, ev) })

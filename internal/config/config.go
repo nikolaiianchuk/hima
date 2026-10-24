@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/nikolaiianchuk/hima/internal/totp"
 )
 
 const (
@@ -60,6 +62,9 @@ type Auth struct {
 	// PasswordHash, in password mode, is a bcrypt hash produced by
 	// `hima hash-password`.
 	PasswordHash string `yaml:"password_hash"`
+	// TOTPSecret, in password mode, adds a one-time code from an
+	// authenticator app; generate it with `hima totp-setup`.
+	TOTPSecret string `yaml:"totp_secret"`
 }
 
 // Load reads path (if non-empty and present), applies environment overrides,
@@ -109,9 +114,12 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.Auth.Mode, "HIMA_AUTH_MODE")
 	set(&c.Auth.ProxyHeader, "HIMA_AUTH_PROXY_HEADER")
 	set(&c.Auth.PasswordHash, "HIMA_AUTH_PASSWORD_HASH")
+	set(&c.Auth.TOTPSecret, "HIMA_AUTH_TOTP_SECRET")
 	set(&c.Notifications.Ntfy.URL, "HIMA_NTFY_URL")
 	set(&c.Notifications.Ntfy.Token, "HIMA_NTFY_TOKEN")
 	set(&c.Notifications.Webhook.URL, "HIMA_WEBHOOK_URL")
+	set(&c.Notifications.Telegram.BotToken, "HIMA_TELEGRAM_BOT_TOKEN")
+	set(&c.Notifications.Telegram.ChatID, "HIMA_TELEGRAM_CHAT_ID")
 	set(&c.CalDAV.URL, "HIMA_CALDAV_URL")
 	set(&c.CalDAV.Username, "HIMA_CALDAV_USERNAME")
 	set(&c.CalDAV.Password, "HIMA_CALDAV_PASSWORD")
@@ -161,6 +169,14 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf(`auth.mode %q is invalid: use "proxy" or "password"`, c.Auth.Mode)
 	}
+	if c.Auth.TOTPSecret != "" {
+		if c.Auth.Mode != AuthModePassword {
+			return errors.New("auth.totp_secret only applies to password mode; in proxy mode, use your proxy's second factor")
+		}
+		if _, err := totp.ParseSecret(c.Auth.TOTPSecret); err != nil {
+			return fmt.Errorf("auth.totp_secret: %w", err)
+		}
+	}
 	if _, err := c.Availability(); err != nil {
 		return err
 	}
@@ -175,6 +191,9 @@ func (c *Config) Validate() error {
 		if u != "" && !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "http://") {
 			return fmt.Errorf("%s must be an http(s) URL", name)
 		}
+	}
+	if tg := c.Notifications.Telegram; (tg.BotToken == "") != (tg.ChatID == "") {
+		return errors.New("notifications.telegram needs both bot_token and chat_id")
 	}
 	if dav := c.CalDAV; dav.URL != "" {
 		if !strings.HasPrefix(dav.URL, "https://") && !strings.HasPrefix(dav.URL, "http://") {
@@ -255,6 +274,12 @@ type Notifications struct {
 	Webhook struct {
 		URL string `yaml:"url"`
 	} `yaml:"webhook"`
+	Telegram struct {
+		BotToken string `yaml:"bot_token"`
+		ChatID   string `yaml:"chat_id"`
+		// AttachICS sends the .ics with new-Booking and reschedule messages.
+		AttachICS bool `yaml:"attach_ics"`
+	} `yaml:"telegram"`
 }
 
 type CalDAVConfig struct {

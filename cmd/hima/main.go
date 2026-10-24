@@ -3,6 +3,7 @@
 //	hima [-config hima.yaml]   start the server
 //	hima hash-password         print a bcrypt hash for auth.password_hash
 //	hima healthcheck           exit 0 if the local server answers /healthz
+//	hima totp-setup            print a new secret for auth.totp_secret
 package main
 
 import (
@@ -33,6 +34,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/store"
+	"github.com/nikolaiianchuk/hima/internal/totp"
 	"github.com/nikolaiianchuk/hima/internal/web"
 	"github.com/nikolaiianchuk/hima/internal/writeback"
 )
@@ -45,6 +47,8 @@ func main() {
 			cmd = hashPassword
 		case "healthcheck":
 			cmd = healthcheck
+		case "totp-setup":
+			cmd = totpSetup
 		}
 		if cmd != nil {
 			if err := cmd(); err != nil {
@@ -97,6 +101,9 @@ func run(log *slog.Logger) error {
 	}
 	if n := cfg.Notifications.Ntfy; n.URL != "" {
 		notifier.Ntfy = &notify.NtfyConfig{URL: n.URL, Token: n.Token, AttachICS: n.AttachICS}
+	}
+	if tg := cfg.Notifications.Telegram; tg.BotToken != "" {
+		notifier.Telegram = &notify.TelegramConfig{BotToken: tg.BotToken, ChatID: tg.ChatID, AttachICS: tg.AttachICS}
 	}
 	if cfg.BaseURL != "" {
 		notifier.ClickURL = cfg.BaseURL + "/admin/"
@@ -293,5 +300,20 @@ func healthcheck() error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("healthz: %s", resp.Status)
 	}
+	return nil
+}
+
+// totpSetup prints a new TOTP secret and the link authenticator apps import.
+func totpSetup() error {
+	secret := totp.NewSecret()
+	fmt.Println("Add this to hima.yaml (password mode):")
+	fmt.Println()
+	fmt.Println("  auth:")
+	fmt.Println("    totp_secret: " + secret)
+	fmt.Println()
+	fmt.Println("Then add it to your authenticator app, either by typing the secret")
+	fmt.Println("or by turning this link into a QR code (e.g. `qrencode -t ansiutf8 '<link>'`):")
+	fmt.Println()
+	fmt.Println("  " + totp.URL(secret, "admin"))
 	return nil
 }

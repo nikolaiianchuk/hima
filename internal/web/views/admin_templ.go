@@ -2860,7 +2860,7 @@ func swatchStyle(hex string) templ.SafeCSS {
 }
 
 // ---------- Login ----------
-func Login(failed bool, accent string) templ.Component {
+func Login(failed, askCode bool, accent string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -2906,12 +2906,29 @@ func Login(failed bool, accent string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if failed {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "<p class=\"error\" role=\"alert\">Wrong password.</p>")
+				if askCode {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "<p class=\"error\" role=\"alert\">Wrong password or code.</p>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				} else {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 246, "<p class=\"error\" role=\"alert\">Wrong password.</p>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 247, "<form method=\"post\" action=\"/admin/login\" class=\"stack gap-12\"><div class=\"field\"><label for=\"password\">Password</label> <input id=\"password\" class=\"input input-lg\" type=\"password\" name=\"password\" autocomplete=\"current-password\" autofocus required></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if askCode {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "<div class=\"field\"><label for=\"code\">Code from your authenticator app</label> <input id=\"code\" class=\"input input-lg mono\" type=\"text\" name=\"code\" inputmode=\"numeric\" pattern=\"[0-9 ]*\" autocomplete=\"one-time-code\" maxlength=\"7\" required></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 246, "<form method=\"post\" action=\"/admin/login\" class=\"stack gap-12\"><div class=\"field\"><label for=\"password\">Password</label> <input id=\"password\" class=\"input input-lg\" type=\"password\" name=\"password\" autocomplete=\"current-password\" autofocus required></div><button type=\"submit\" class=\"btn btn-lg btn-block\">Log in</button></form></main></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 249, "<button type=\"submit\" class=\"btn btn-lg btn-block\">Log in</button></form></main></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

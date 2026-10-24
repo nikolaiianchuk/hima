@@ -29,11 +29,12 @@ Terms follow [CONTEXT.md](../CONTEXT.md). Decisions: [docs/adr](./adr).
 - ~~CalDAV as Calendar source and write target (Radicale, Baïkal, iCloud, Fastmail)~~
 - ~~Rate limiting per Invite / per IP, daily Booking cap on Availability~~
 
-## Phase 3 — big providers
+## Phase 3 — big providers (done, except passkeys)
 
-- Google Calendar and Microsoft 365/Outlook together (OAuth read + write)
-- Telegram notifications
-- Passkeys / TOTP for password mode
+- ~~Google Calendar and Microsoft 365/Outlook together (OAuth read + write)~~
+- ~~Telegram notifications~~
+- ~~TOTP for password mode~~
+- Passkeys for password mode (deferred: proxy mode with Authentik already offers them)
 
 ## Later / maybe
 
