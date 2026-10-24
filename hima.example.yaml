@@ -1,0 +1,26 @@
+# Copy to hima.yaml. Every key can also be set via HIMA_* environment
+# variables (e.g. HIMA_AUTH_MODE), which take precedence.
+
+# Public URL used when building Invite and Manage links.
+base_url: https://hima.example.com
+
+# Defaults to 127.0.0.1:8080 in proxy mode and :8080 in password mode.
+# In Docker with proxy mode, set it explicitly (e.g. ":8080").
+# listen: 127.0.0.1:8080
+
+database: hima.db
+
+owner:
+  name: Nikolai
+
+auth:
+  # Required, no default — hima refuses to start without it (docs/adr/0002).
+  #   proxy    — your reverse proxy (Authelia, Tailscale, …) protects /admin
+  #   password — built-in login
+  mode: proxy
+
+  # proxy mode: optionally require a header your proxy sets.
+  # proxy_header: Remote-User
+
+  # password mode: generate with `hima hash-password`.
+  # password_hash: $2a$10$...

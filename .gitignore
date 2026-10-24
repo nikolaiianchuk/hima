@@ -1,1 +1,6 @@
 .DS_Store
+/bin/
+/hima.yaml
+*.db
+*.db-shm
+*.db-wal

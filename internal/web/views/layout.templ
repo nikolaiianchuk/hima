@@ -1,0 +1,27 @@
+package views
+
+templ layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ title } · hima</title>
+			<style>
+				:root { color-scheme: light dark; --fg: #1d1d1f; --bg: #fafaf7; --muted: #6e6e73; --accent: #b4553a; }
+				@media (prefers-color-scheme: dark) { :root { --fg: #f2f2ee; --bg: #161615; --muted: #9a9a95; --accent: #e08a6d; } }
+				body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+				main { max-width: 36rem; margin: 0 auto; padding: 3rem 1rem; }
+				h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+				p.muted { color: var(--muted); }
+				input, button { font: inherit; padding: .5rem .75rem; }
+				button { background: var(--accent); color: #fff; border: 0; border-radius: .375rem; cursor: pointer; }
+			</style>
+		</head>
+		<body>
+			<main>
+				{ children... }
+			</main>
+		</body>
+	</html>
+}

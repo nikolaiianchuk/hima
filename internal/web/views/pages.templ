@@ -1,0 +1,42 @@
+package views
+
+// DeadInvite is shown for Used up, Expired, Revoked and unknown Invites alike,
+// so Guests cannot tell them apart.
+templ DeadInvite(ownerName string) {
+	@layout("Invite unavailable") {
+		<h1>This invite is no longer valid</h1>
+		<p class="muted">Ask { ownerName } to send you a new one.</p>
+	}
+}
+
+templ NotFound() {
+	@layout("Not found") {
+		<h1>Not found</h1>
+		<p class="muted">This link doesn't lead anywhere.</p>
+	}
+}
+
+templ AdminHome(ownerName string, canLogout bool) {
+	@layout("Admin") {
+		<h1>Hi, { ownerName } 👋</h1>
+		<p class="muted">Invites and Bookings will live here.</p>
+		if canLogout {
+			<form method="post" action="/admin/logout">
+				<button type="submit">Log out</button>
+			</form>
+		}
+	}
+}
+
+templ Login(failed bool) {
+	@layout("Log in") {
+		<h1>Log in</h1>
+		if failed {
+			<p class="muted">Wrong password.</p>
+		}
+		<form method="post" action="/admin/login">
+			<input type="password" name="password" autocomplete="current-password" autofocus required/>
+			<button type="submit">Log in</button>
+		</form>
+	}
+}
