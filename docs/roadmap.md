@@ -36,6 +36,10 @@ Terms follow [CONTEXT.md](../CONTEXT.md). Decisions: [docs/adr](./adr).
 - ~~TOTP for password mode~~
 - Passkeys for password mode (deferred: proxy mode with Authentik already offers them)
 
+## Since then
+
+- ~~Email invitations to the Owner as a write-back option (SMTP)~~
+
 ## Later / maybe
 
 - Named Availability profiles ("work", "weekends")

@@ -8,7 +8,7 @@
 - **Free/busy from your calendars**: any number of private ICS URLs (Google, iCloud, Fastmail, Nextcloud, Outlook), a CalDAV account, Google Calendar and Microsoft 365 (free/busy only; [setup](docs/connect-google-microsoft.md)). Recurring events, moved or cancelled occurrences, events marked free, all-day events and invitations you declined are all handled. Guests only ever see free Slots, or optionally busy blocks, never titles.
 - **Availability**: weekly hours in your time zone, buffers, minimum notice, booking horizon.
 - **Guests** pick a Slot in their own time zone, give their name, get a `.ics` file and a private Manage link to reschedule or cancel.
-- **Your calendar**: Bookings written straight into a CalDAV, Google or Microsoft calendar (updated on reschedule, removed on cancel), or a private feed to subscribe to.
+- **Your calendar**: Bookings written straight into a CalDAV, Google or Microsoft calendar, or sent to you as [email invitations](docs/email-invites.md) any calendar picks up (updated on reschedule, removed on cancel), or a private feed to subscribe to.
 - **Abuse limits**: optional cap on Bookings per day, plus rate limits on booking and login.
 - **Notifications** via ntfy or Telegram (optionally with the `.ics` attached) and/or a webhook, plus an activity log.
 - **Your look**: pick an accent colour in Settings; it applies to the admin and every Guest page.
@@ -56,6 +56,7 @@ Generated `*_templ.go` files are committed so `go build` works without running `
 - [Install with Caddy](docs/install-caddy.md)
 - [Self-host with Caddy, Authentik and ntfy](docs/install-caddy-authentik-ntfy.md)
 - [Connect Google Calendar or Microsoft 365](docs/connect-google-microsoft.md)
+- [Email invitations](docs/email-invites.md)
 - [CONTEXT.md](CONTEXT.md): glossary
 - [docs/adr](docs/adr): architecture decisions
 - [docs/roadmap.md](docs/roadmap.md): MVP and later phases

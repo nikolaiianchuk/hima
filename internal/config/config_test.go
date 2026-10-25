@@ -31,6 +31,10 @@ func TestLoad(t *testing.T) {
 		{name: "oauth needs base_url", yaml: "auth: {mode: proxy}\ngoogle: {client_id: a, client_secret: b}", wantErr: true},
 		{name: "one write target", yaml: "auth: {mode: proxy}\nbase_url: https://h.test\ngoogle: {client_id: a, client_secret: b, write: primary}\nmicrosoft: {client_id: a, client_secret: b, write: true}", wantErr: true},
 		{name: "google ok", yaml: "auth: {mode: proxy}\nbase_url: https://h.test\ngoogle: {client_id: a, client_secret: b, write: primary}", wantListen: "127.0.0.1:8080"},
+		{name: "email invites need from", yaml: "auth: {mode: proxy}\nowner: {emails: [me@x.com]}\nemail_invites: {smtp: {host: smtp.x.com}}", wantErr: true},
+		{name: "email invites from = to", yaml: "auth: {mode: proxy}\nowner: {emails: [me@x.com]}\nemail_invites: {from: me@x.com, smtp: {host: smtp.x.com}}", wantErr: true},
+		{name: "email invites and caldav write", yaml: "auth: {mode: proxy}\nowner: {emails: [me@x.com]}\nemail_invites: {from: hima@x.com, smtp: {host: smtp.x.com}}\ncaldav: {url: 'https://d.x', username: u, password: p, write: P}", wantErr: true},
+		{name: "email invites ok", yaml: "auth: {mode: proxy}\nowner: {emails: [me@x.com]}\nemail_invites: {from: hima@x.com, smtp: {host: smtp.x.com}}", wantListen: "127.0.0.1:8080"},
 		{name: "env overrides file", yaml: "auth: {mode: password}", env: map[string]string{"HIMA_AUTH_MODE": "proxy"}, wantListen: "127.0.0.1:8080"},
 	}
 	for _, tt := range tests {

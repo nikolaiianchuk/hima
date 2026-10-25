@@ -49,7 +49,7 @@ The ending of a Booking before it happens, recording whether the Guest or the Ow
 _Avoid_: Deletion, guest-cancel / owner-cancel as separate terms
 
 **Write-back calendar**:
-The one calendar of the Owner's (CalDAV, Google or Microsoft) that hima keeps Bookings in, adding, updating and removing them as they change.
+The one calendar of the Owner's that hima keeps Bookings in, adding, updating and removing them as they change: through CalDAV, Google, Microsoft, or email invitations to the Owner.
 _Avoid_: Sync, target calendar, Owner feed
 
 **Owner feed**:

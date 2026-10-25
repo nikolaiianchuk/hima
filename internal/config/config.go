@@ -44,6 +44,9 @@ type Config struct {
 	// Google and Microsoft connect through OAuth apps the Owner registers.
 	Google    GoogleConfig    `yaml:"google"`
 	Microsoft MicrosoftConfig `yaml:"microsoft"`
+	// EmailInvites writes Bookings to the Owner's calendar by sending
+	// calendar invitations over SMTP. Off unless smtp.host is set.
+	EmailInvites EmailInvitesConfig `yaml:"email_invites"`
 }
 
 type Owner struct {
@@ -84,6 +87,13 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	c.applyEnv(os.Getenv)
+	if f := c.EmailInvites.SMTP.PasswordFile; f != "" {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return nil, fmt.Errorf("email_invites.smtp.password_file: %w", err)
+		}
+		c.EmailInvites.SMTP.Password = strings.TrimSpace(string(b))
+	}
 	if f := c.CalDAV.PasswordFile; f != "" {
 		b, err := os.ReadFile(f)
 		if err != nil {
@@ -130,6 +140,12 @@ func (c *Config) applyEnv(getenv func(string) string) {
 	set(&c.Microsoft.ClientID, "HIMA_MICROSOFT_CLIENT_ID")
 	set(&c.Microsoft.ClientSecret, "HIMA_MICROSOFT_CLIENT_SECRET")
 	set(&c.Microsoft.Tenant, "HIMA_MICROSOFT_TENANT")
+	set(&c.EmailInvites.To, "HIMA_EMAIL_INVITES_TO")
+	set(&c.EmailInvites.From, "HIMA_EMAIL_INVITES_FROM")
+	set(&c.EmailInvites.SMTP.Host, "HIMA_SMTP_HOST")
+	set(&c.EmailInvites.SMTP.Username, "HIMA_SMTP_USERNAME")
+	set(&c.EmailInvites.SMTP.Password, "HIMA_SMTP_PASSWORD")
+	set(&c.EmailInvites.SMTP.PasswordFile, "HIMA_SMTP_PASSWORD_FILE")
 	if v := getenv("HIMA_NTFY_ATTACH_ICS"); v != "" {
 		c.Notifications.Ntfy.AttachICS = v == "true" || v == "1"
 	}
@@ -152,6 +168,14 @@ func (c *Config) applyDefaults() {
 	c.BaseURL = strings.TrimRight(c.BaseURL, "/")
 	c.AvailabilityConfig.applyDefaults()
 	c.InviteDefaults.applyDefaults()
+	if e := &c.EmailInvites; e.SMTP.Host != "" {
+		if e.SMTP.Port == 0 {
+			e.SMTP.Port = 587
+		}
+		if e.To == "" && len(c.Owner.Emails) > 0 {
+			e.To = strings.TrimSpace(c.Owner.Emails[0])
+		}
+	}
 	if c.RetentionDays == 0 {
 		c.RetentionDays = 90
 	}
@@ -212,14 +236,25 @@ func (c *Config) Validate() error {
 	if c.Microsoft.ClientID != "" && c.Microsoft.ClientSecret == "" {
 		return errors.New("microsoft.client_secret is required")
 	}
+	if e := c.EmailInvites; e.SMTP.Host != "" {
+		if !strings.Contains(e.From, "@") {
+			return errors.New("email_invites.from must be the address invitations are sent from (usually your SMTP account's)")
+		}
+		if !strings.Contains(e.To, "@") {
+			return errors.New("email_invites.to (or owner.emails) must say where invitations go")
+		}
+		if strings.EqualFold(e.From, e.To) {
+			return errors.New("email_invites.from and to must differ: calendars ignore invitations you sent yourself")
+		}
+	}
 	writers := 0
-	for _, on := range []bool{c.CalDAV.URL != "" && c.CalDAV.Write != "", c.Google.ClientID != "" && c.Google.Write != "", c.Microsoft.ClientID != "" && c.Microsoft.Write} {
+	for _, on := range []bool{c.CalDAV.URL != "" && c.CalDAV.Write != "", c.Google.ClientID != "" && c.Google.Write != "", c.Microsoft.ClientID != "" && c.Microsoft.Write, c.EmailInvites.SMTP.Host != ""} {
 		if on {
 			writers++
 		}
 	}
 	if writers > 1 {
-		return errors.New("Bookings can be written to one calendar only: set write on just one of caldav, google and microsoft")
+		return errors.New("Bookings can be written to one calendar only: use just one of caldav.write, google.write, microsoft.write and email_invites")
 	}
 	for i, cal := range c.Calendars {
 		if !strings.HasPrefix(cal.URL, "https://") && !strings.HasPrefix(cal.URL, "http://") {
@@ -315,4 +350,19 @@ type MicrosoftConfig struct {
 	Read *bool `yaml:"read"`
 	// Write puts Bookings in the default calendar.
 	Write bool `yaml:"write"`
+}
+
+type EmailInvitesConfig struct {
+	// To is the Owner's address; defaults to the first of owner.emails.
+	To string `yaml:"to"`
+	// From is the sender and the invitations' organiser.
+	From string `yaml:"from"`
+	SMTP struct {
+		Host string `yaml:"host"`
+		// Port is 465 for TLS from the start, or 587 (default) for STARTTLS.
+		Port         int    `yaml:"port"`
+		Username     string `yaml:"username"`
+		Password     string `yaml:"password"`
+		PasswordFile string `yaml:"password_file"`
+	} `yaml:"smtp"`
 }

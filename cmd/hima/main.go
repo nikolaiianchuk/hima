@@ -31,6 +31,7 @@ import (
 	"github.com/nikolaiianchuk/hima/internal/calsource"
 	"github.com/nikolaiianchuk/hima/internal/config"
 	"github.com/nikolaiianchuk/hima/internal/ics"
+	"github.com/nikolaiianchuk/hima/internal/mailinvite"
 	"github.com/nikolaiianchuk/hima/internal/notify"
 	"github.com/nikolaiianchuk/hima/internal/oauthcal"
 	"github.com/nikolaiianchuk/hima/internal/store"
@@ -139,6 +140,15 @@ func run(log *slog.Logger) error {
 		target, targetName = &oauthcal.GoogleWriter{P: google, Calendar: cfg.Google.Write}, "Google Calendar ("+cfg.Google.Write+")"
 	case microsoft != nil && cfg.Microsoft.Write:
 		target, targetName = &oauthcal.MicrosoftWriter{P: microsoft}, "Microsoft 365 calendar"
+	case cfg.EmailInvites.SMTP.Host != "":
+		e := cfg.EmailInvites
+		target, targetName = &mailinvite.Target{
+			SMTP:      mailinvite.SMTP{Host: e.SMTP.Host, Port: e.SMTP.Port, Username: e.SMTP.Username, Password: e.SMTP.Password},
+			From:      e.From,
+			To:        e.To,
+			OwnerName: cfg.Owner.Name,
+			Loc:       avail.Location,
+		}, "invitations emailed to "+e.To
 	}
 	var mirror *writeback.Mirror
 	if target != nil {

@@ -100,6 +100,19 @@ retention_days: 90
 #   read: true
 #   write: false
 
+# Email invitations: hima emails you a calendar invitation for each Booking
+# (updates and cancellations too), so any calendar that reads invitations
+# from email keeps itself up to date. Needs an SMTP account; counts as your
+# one write-back calendar. See docs/email-invites.md.
+# email_invites:
+#   from: hima@example.com          # sender / organiser; not your own address
+#   to: you@example.com             # default: first of owner.emails
+#   smtp:
+#     host: smtp.fastmail.com
+#     port: 465                     # 465 = TLS, 587 = STARTTLS (default)
+#     username: hima@example.com
+#     password_file: /run/secrets/smtp
+
 # Calendar sources: private ICS URLs. Everything in them counts as busy,
 # except events marked "free". (For webcal:// links, use https:// instead.)
 calendars:
