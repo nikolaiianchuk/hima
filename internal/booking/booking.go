@@ -83,7 +83,8 @@ func (s *Service) mirrorRemove(b store.Booking) {
 	}
 }
 
-func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message string, b store.Booking) {
+// notify tells the Owner about b; prev is the Booking before a reschedule.
+func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message string, b store.Booking, prev ...store.Booking) {
 	if s.Notifier == nil {
 		return
 	}
@@ -96,16 +97,20 @@ func (s *Service) notify(ctx context.Context, kind notify.Kind, title, message s
 			attachment = &notify.Attachment{Filename: "booking.ics", Data: data}
 		}
 	}
+	info := &notify.BookingInfo{
+		GuestName: b.GuestName, Note: b.Note, Location: b.Location,
+		InviteLabel: b.InviteLabel, Start: b.Start, End: b.End, When: s.when(b),
+	}
+	if len(prev) > 0 {
+		info.PreviousWhen = s.when(prev[0])
+	}
 	s.Notifier.Notify(ctx, notify.Event{
 		Attachment: attachment,
 		Kind:       kind,
 		At:         s.Now(),
 		Title:      title,
 		Message:    message,
-		Booking: &notify.BookingInfo{
-			GuestName: b.GuestName, Note: b.Note, Location: b.Location,
-			InviteLabel: b.InviteLabel, Start: b.Start, End: b.End,
-		},
+		Booking:    info,
 		// The Owner's own actions are logged, not pushed back to them.
 		Silent: kind == notify.CancelledByOwner || kind == notify.EditedByOwner,
 	})
@@ -442,7 +447,7 @@ func (s *Service) Reschedule(ctx context.Context, tok string, start time.Time) (
 	}
 	b := m.Booking
 	b.Start, b.End, b.Sequence, b.Reschedules = start, start.Add(d), b.Sequence+1, b.Reschedules+1
-	s.notify(ctx, notify.Rescheduled, b.GuestName+" rescheduled", s.when(m.Booking)+" → "+s.when(b), b)
+	s.notify(ctx, notify.Rescheduled, b.GuestName+" rescheduled", s.when(m.Booking)+" → "+s.when(b), b, m.Booking)
 	s.mirrorUpsert(b)
 	return b, nil
 }

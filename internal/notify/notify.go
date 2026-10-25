@@ -60,6 +60,10 @@ type BookingInfo struct {
 	InviteLabel string    `json:"invite_label,omitempty"`
 	Start       time.Time `json:"start"`
 	End         time.Time `json:"end"`
+	// When is Start–End formatted for the Owner, e.g. "Mon 26 Oct, 10:00–10:30".
+	When string `json:"when"`
+	// PreviousWhen is the time before a reschedule.
+	PreviousWhen string `json:"previous_when,omitempty"`
 }
 
 // Notifier receives Events. A nil Notifier is valid and does nothing.

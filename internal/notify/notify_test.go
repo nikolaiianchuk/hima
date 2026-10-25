@@ -217,7 +217,7 @@ func TestTelegram(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	joined := strings.Join(got, "\n")
-	for _, want := range []string{"/bot123:abc/sendDocument 42 booking.ics ICS New booking: Zoë\nMon 26 Oct", "/bot123:abc/sendMessage 42 Zoë cancelled\nMon 26 Oct"} {
+	for _, want := range []string{"/bot123:abc/sendDocument 42 booking.ics ICS 🗓 <b>New booking: Zoë</b>\nMon 26 Oct", "/bot123:abc/sendMessage 42 ❌ <b>Zoë cancelled</b>\nMon 26 Oct"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing %q in\n%s", want, joined)
 		}
@@ -229,5 +229,38 @@ func TestTelegramErrorsHideToken(t *testing.T) {
 	err := d.sendTelegram(context.Background(), Event{Title: "x"})
 	if err == nil || strings.Contains(err.Error(), "secret") {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestTelegramHTML(t *testing.T) {
+	booked := telegramHTML(Event{Kind: Booked, Title: "New booking: Alex <script>", Booking: &BookingInfo{
+		When: "Mon 26 Oct, 10:00–10:30", Location: "https://meet.example.com/a?b=1&c=2", Note: "bring <photos> & maps", InviteLabel: "for Alex",
+	}})
+	want := "🗓 <b>New booking: Alex &lt;script&gt;</b>\n" +
+		"🕐 Mon 26 Oct, 10:00–10:30\n" +
+		`📍 <a href="https://meet.example.com/a?b=1&amp;c=2">https://meet.example.com/a?b=1&amp;c=2</a>` + "\n" +
+		"💬 <i>bring &lt;photos&gt; &amp; maps</i>\n" +
+		"🏷 Invite “for Alex”"
+	if booked != want {
+		t.Errorf("booked:\n%s\nwant:\n%s", booked, want)
+	}
+	moved := telegramHTML(Event{Kind: Rescheduled, Title: "Alex rescheduled", Booking: &BookingInfo{When: "Tue 27 Oct, 11:00–11:30", PreviousWhen: "Mon 26 Oct, 10:00–10:30", Location: "Café"}})
+	if !strings.Contains(moved, "🕐 <s>Mon 26 Oct, 10:00–10:30</s>\n➡️ <b>Tue 27 Oct, 11:00–11:30</b>\n📍 Café") {
+		t.Errorf("moved:\n%s", moved)
+	}
+	cancelled := telegramHTML(Event{Kind: CancelledByGuest, Title: "Alex cancelled", Booking: &BookingInfo{When: "Mon 26 Oct, 10:00–10:30"}})
+	if !strings.Contains(cancelled, "❌ <b>Alex cancelled</b>\n🕐 <s>Mon 26 Oct, 10:00–10:30</s>") {
+		t.Errorf("cancelled:\n%s", cancelled)
+	}
+}
+
+func TestTelegramButtonOnlyForHTTPS(t *testing.T) {
+	d := &Dispatcher{ClickURL: "http://localhost:8080/admin/"}
+	if d.telegramButton() != nil {
+		t.Error("button for http URL")
+	}
+	d.ClickURL = "https://hima.example.com/admin/"
+	if d.telegramButton() == nil {
+		t.Error("no button for https URL")
 	}
 }

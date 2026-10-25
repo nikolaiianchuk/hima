@@ -501,3 +501,18 @@ func TestMirrorFollowsBookings(t *testing.T) {
 		t.Errorf("ops = %v, want %v", m.ops, want)
 	}
 }
+
+func TestNotificationCarriesFormattedTimes(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	tok := e.invite(t, NewInvite{})
+	_, manage, _ := e.Book(ctx, tok, at("2026-10-26 10:00"), 30*time.Minute, alex)
+	e.Reschedule(ctx, manage, at("2026-10-27 11:00"))
+	booked, moved := e.events.events[0].Booking, e.events.events[1].Booking
+	if booked.When != "Mon 26 Oct, 10:00–10:30" || booked.PreviousWhen != "" {
+		t.Errorf("booked %+v", booked)
+	}
+	if moved.When != "Tue 27 Oct, 11:00–11:30" || moved.PreviousWhen != "Mon 26 Oct, 10:00–10:30" {
+		t.Errorf("moved %+v", moved)
+	}
+}
