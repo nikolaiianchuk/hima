@@ -217,7 +217,7 @@ func TestTelegram(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	joined := strings.Join(got, "\n")
-	for _, want := range []string{"/bot123:abc/sendDocument 42 booking.ics ICS 🗓 <b>New booking: Zoë</b>\nMon 26 Oct", "/bot123:abc/sendMessage 42 ❌ <b>Zoë cancelled</b>\nMon 26 Oct"} {
+	for _, want := range []string{"/bot123:abc/sendDocument 42 booking.ics ICS 🗓️ <b>New booking: Zoë</b>\nMon 26 Oct", "/bot123:abc/sendMessage 42 ❌ <b>Zoë cancelled</b>\nMon 26 Oct"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing %q in\n%s", want, joined)
 		}
@@ -236,11 +236,11 @@ func TestTelegramHTML(t *testing.T) {
 	booked := telegramHTML(Event{Kind: Booked, Title: "New booking: Alex <script>", Booking: &BookingInfo{
 		When: "Mon 26 Oct, 10:00–10:30", Location: "https://meet.example.com/a?b=1&c=2", Note: "bring <photos> & maps", InviteLabel: "for Alex",
 	}})
-	want := "🗓 <b>New booking: Alex &lt;script&gt;</b>\n" +
+	want := "🗓️ <b>New booking: Alex &lt;script&gt;</b>\n" +
 		"🕐 Mon 26 Oct, 10:00–10:30\n" +
 		`📍 <a href="https://meet.example.com/a?b=1&amp;c=2">https://meet.example.com/a?b=1&amp;c=2</a>` + "\n" +
 		"💬 <i>bring &lt;photos&gt; &amp; maps</i>\n" +
-		"🏷 Invite “for Alex”"
+		"🏷️ Invite “for Alex”"
 	if booked != want {
 		t.Errorf("booked:\n%s\nwant:\n%s", booked, want)
 	}

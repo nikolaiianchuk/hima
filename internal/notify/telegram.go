@@ -47,8 +47,10 @@ type redactedError struct {
 func (e redactedError) Error() string { return strings.ReplaceAll(e.err.Error(), e.secret, "…") }
 func (e redactedError) Unwrap() error { return e.err }
 
+// telegramIcons are emoji with U+FE0F where needed (🗓️, 🏷️, ⚠️, ✏️, ➡️):
+// without it some apps draw a narrow text glyph that swallows the space.
 var telegramIcons = map[Kind]string{
-	Booked:            "🗓",
+	Booked:            "🗓️",
 	Rescheduled:       "🔄",
 	CancelledByGuest:  "❌",
 	CancelledByOwner:  "❌",
@@ -100,7 +102,7 @@ func telegramHTML(ev Event) string {
 		line("💬", "<i>"+e(string(note))+"</i>")
 	}
 	if bk.InviteLabel != "" {
-		line("🏷", "Invite “"+e(bk.InviteLabel)+"”")
+		line("🏷️", "Invite “"+e(bk.InviteLabel)+"”")
 	}
 	return b.String()
 }
