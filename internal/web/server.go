@@ -153,6 +153,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	})
 	admin("GET /admin/invites", s.handleInvites)
 	admin("GET /admin/invites/new", s.handleNewInvite)
+	admin("GET /admin/invites/preview", s.handleInvitePreview)
 	admin("POST /admin/invites", s.handleCreateInvite)
 	admin("GET /admin/invites/{id}", s.handleInviteDetail)
 	admin("POST /admin/invites/{id}", s.handleEditInvite)

@@ -234,7 +234,7 @@ func availabilitySummary(a schedule.Availability) string {
 	return strings.Join(groups, ", ")
 }
 
-func (s *Server) newInvitePage(ctx context.Context, form views.NewInviteForm, errMsg string) views.NewInvitePage {
+func (s *Server) newInvitePage(ctx context.Context, form views.NewInviteForm, n booking.NewInvite, errMsg string) views.NewInvitePage {
 	a := s.svc.Availability
 	hint := "Inside your Availability: " + availabilitySummary(a) + " (" + zoneCity(a.Location) + ")"
 	if a.MinNotice > 0 {
@@ -243,70 +243,61 @@ func (s *Server) newInvitePage(ctx context.Context, form views.NewInviteForm, er
 	if a.Buffer > 0 {
 		hint += ", " + durationLabel(a.Buffer) + " buffers"
 	}
-	p := views.NewInvitePage{
+	return views.NewInvitePage{
 		AdminFrame:       s.frame("invites"),
 		Form:             form,
 		Error:            errMsg,
 		TZ:               zoneCity(a.Location),
 		AvailabilityHint: hint + ".",
-		PreviewTitle:     "Book time with " + s.cfg.Owner.Name,
+		Preview:          s.invitePreview(ctx, n),
 	}
-	defaults := s.cfg.InviteDefaults
-	var parts []string
-	for _, d := range defaults.Durations {
-		parts = append(parts, strconv.Itoa(int(d/time.Minute)))
-	}
-	summary := strings.Join(parts, " or ") + " min"
-	kind := store.LocationVideo
-	if defaults.Location != "" && !isLink(defaults.Location) {
-		kind = store.LocationPlace
-	}
-	summary += " · " + locationTeaser(kind, defaults.Location)
-	summary += fmt.Sprintf(" · next %d days", int(a.Horizon.Hours()/24))
-	p.PreviewSummary = summary
-	slots, err := s.svc.Slots(ctx, store.Invite{Durations: defaults.Durations}, defaults.Durations[0], 0)
-	switch {
-	case errors.Is(err, calsource.ErrStale):
-		p.PreviewSlots = "No times while calendars can't be read"
-	case err != nil:
-		s.log.Error("preview slots", "err", err)
-	default:
-		p.PreviewSlots = fmt.Sprintf("%d open Slots", len(slots))
-	}
-	return p
 }
 
 func (s *Server) handleNewInvite(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, views.NewInvite(s.newInvitePage(r.Context(), s.newInviteForm(), "")))
+	form := s.newInviteForm()
+	d := s.cfg.InviteDefaults
+	n := booking.NewInvite{Durations: d.Durations, Location: d.Location, LocationKind: selectedKind(form.LocationKinds)}
+	s.render(w, r, http.StatusOK, views.NewInvite(s.newInvitePage(r.Context(), form, n, "")))
 }
 
-func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
+func selectedKind(opts []views.Option) string {
+	for _, o := range opts {
+		if o.Selected {
+			return o.Value
+		}
 	}
+	return ""
+}
+
+// parseInviteForm reads the new-Invite form (POST body or, for the live
+// preview, the query string) into what to show again and what to create.
+func (s *Server) parseInviteForm(r *http.Request) (views.NewInviteForm, booking.NewInvite, error) {
+	if err := r.ParseForm(); err != nil {
+		return views.NewInviteForm{}, booking.NewInvite{}, err
+	}
+	v := r.Form
 	loc := s.ownerLoc()
-	expiresDays, _ := strconv.Atoi(r.PostFormValue("expires_in_days"))
-	maxUses, _ := strconv.Atoi(r.PostFormValue("max_uses"))
+	expiresDays, _ := strconv.Atoi(v.Get("expires_in_days"))
+	maxUses, _ := strconv.Atoi(v.Get("max_uses"))
 	var durations []time.Duration
-	for _, v := range r.PostForm["durations"] {
-		if m, err := strconv.Atoi(v); err == nil {
+	for _, d := range v["durations"] {
+		if m, err := strconv.Atoi(d); err == nil && m > 0 {
 			durations = append(durations, time.Duration(m)*time.Minute)
 		}
 	}
 	slices.Sort(durations)
 	durations = slices.Compact(durations)
-	kind := r.PostFormValue("location_kind")
+	kind := v.Get("location_kind")
 	form := views.NewInviteForm{
-		Label:          r.PostFormValue("label"),
+		Label:          v.Get("label"),
 		ExpiresOptions: expiryOptions(expiresDays),
 		MaxUses:        maxUses,
 		Durations:      durationOptions(durations),
-		RangeStart:     r.PostFormValue("range_start"),
-		RangeEnd:       r.PostFormValue("range_end"),
+		RangeStart:     v.Get("range_start"),
+		RangeEnd:       v.Get("range_end"),
 		LocationKinds:  kindOptions(kind),
-		Location:       r.PostFormValue("location"),
-		ShowBusy:       r.PostFormValue("show_busy") == "1",
+		Location:       v.Get("location"),
+		ShowBusy:       v.Get("show_busy") == "1",
 	}
 	n := booking.NewInvite{
 		Label:        form.Label,
@@ -323,13 +314,98 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 		n.RangeEnd, err = parseDate(form.RangeEnd, loc, 1)
 	}
 	if err != nil {
-		s.render(w, r, http.StatusUnprocessableEntity, views.NewInvite(s.newInvitePage(r.Context(), form, "Dates must look like 2026-10-31.")))
+		err = &booking.InputError{Msg: "Dates must look like 2026-10-31."}
+	}
+	return form, n, err
+}
+
+// invitePreview is what a Guest would see for n, Slots counted for its
+// shortest duration.
+func (s *Server) invitePreview(ctx context.Context, n booking.NewInvite) views.InvitePreview {
+	a := s.svc.Availability
+	p := views.InvitePreview{Title: "Book time with " + s.cfg.Owner.Name}
+	var parts []string
+	if len(n.Durations) == 0 {
+		parts = append(parts, "Pick a duration")
+	} else {
+		var mins []string
+		for _, d := range n.Durations {
+			mins = append(mins, strconv.Itoa(int(d/time.Minute)))
+		}
+		parts = append(parts, strings.Join(mins, " or ")+" min")
+	}
+	if where := locationTeaser(n.LocationKind, strings.TrimSpace(n.Location)); where != "" {
+		parts = append(parts, where)
+	}
+	if !n.RangeStart.IsZero() || !n.RangeEnd.IsZero() {
+		from, to := n.RangeStart, n.RangeEnd
+		if from.IsZero() {
+			from = s.svc.Now()
+		}
+		if to.IsZero() {
+			to = s.svc.Now().Add(a.Horizon)
+		}
+		if !from.Before(to) {
+			p.Summary = strings.Join(parts, " · ")
+			p.Slots = "The dates end before they start"
+			return p
+		}
+		parts = append(parts, dateRangeLabel(from, to, a.Location))
+	} else {
+		parts = append(parts, fmt.Sprintf("next %d days", int(math.Round(a.Horizon.Hours()/24))))
+	}
+	if n.ShowBusy {
+		parts = append(parts, "busy times shown")
+	}
+	p.Summary = strings.Join(parts, " · ")
+	if len(n.Durations) == 0 {
+		return p
+	}
+	slots, err := s.svc.Slots(ctx, store.Invite{Durations: n.Durations, RangeStart: n.RangeStart, RangeEnd: n.RangeEnd}, n.Durations[0], 0)
+	switch {
+	case errors.Is(err, calsource.ErrStale):
+		p.Slots = "No times while calendars can't be read"
+	case err != nil:
+		s.log.Error("preview slots", "err", err)
+	default:
+		p.Slots = fmt.Sprintf("%d open Slots", len(slots))
+		if len(n.Durations) > 1 {
+			p.Slots += " for " + minutesLabel(n.Durations[0])
+		}
+	}
+	return p
+}
+
+// handleInvitePreview renders the "Guest will see" box for the form's
+// current values; the New Invite page fetches it as you type.
+func (s *Server) handleInvitePreview(w http.ResponseWriter, r *http.Request) {
+	_, n, err := s.parseInviteForm(r)
+	var p views.InvitePreview
+	if err != nil {
+		p = views.InvitePreview{Title: "Book time with " + s.cfg.Owner.Name, Slots: "Check the dates"}
+	} else {
+		p = s.invitePreview(r.Context(), n)
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := views.InvitePreviewBox(p).Render(r.Context(), w); err != nil {
+		s.log.Error("render preview", "err", err)
+	}
+}
+
+func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
+	form, n, err := s.parseInviteForm(r)
+	var inputErr *booking.InputError
+	if errors.As(err, &inputErr) {
+		s.render(w, r, http.StatusUnprocessableEntity, views.NewInvite(s.newInvitePage(r.Context(), form, n, inputErr.Msg)))
+		return
+	}
+	if err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
 	inv, tok, err := s.svc.CreateInvite(r.Context(), n)
-	var inputErr *booking.InputError
 	if errors.As(err, &inputErr) {
-		s.render(w, r, http.StatusUnprocessableEntity, views.NewInvite(s.newInvitePage(r.Context(), form, inputErr.Msg)))
+		s.render(w, r, http.StatusUnprocessableEntity, views.NewInvite(s.newInvitePage(r.Context(), form, n, inputErr.Msg)))
 		return
 	}
 	if err != nil {

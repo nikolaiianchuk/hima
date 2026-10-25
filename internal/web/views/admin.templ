@@ -177,15 +177,31 @@ type NewInviteForm struct {
 	ShowBusy       bool
 }
 
+type InvitePreview struct {
+	Title   string
+	Summary string
+	Slots   string
+}
+
 type NewInvitePage struct {
 	AdminFrame
 	Form             NewInviteForm
 	Error            string
 	TZ               string
 	AvailabilityHint string
-	PreviewTitle     string
-	PreviewSummary   string
-	PreviewSlots     string
+	Preview          InvitePreview
+}
+
+// InvitePreviewBox is the inside of the "Guest will see" box; the page
+// re-fetches it as the form changes.
+templ InvitePreviewBox(p InvitePreview) {
+	<span class="eyebrow">Guest will see</span>
+	<span style="font-size: 18px; font-weight: 700">{ p.Title }</span>
+	<span class="ink-2" style="font-size: 14px">{ p.Summary }</span>
+	if p.Slots != "" {
+		<span class="mono ink-2" style="font-size: 14px">{ p.Slots }</span>
+	}
+	<span class="small muted" style="line-height: 1.5">Not shown: the Label, your calendar details, uses left.</span>
 }
 
 templ NewInvite(p NewInvitePage) {
@@ -197,7 +213,7 @@ templ NewInvite(p NewInvitePage) {
 		if p.Error != "" {
 			<p class="error" role="alert">{ p.Error }</p>
 		}
-		<form method="post" action="/admin/invites" class="cols">
+		<form method="post" action="/admin/invites" class="cols" id="new-invite">
 			<div class="col-2">
 				<div role="group" aria-labelledby="gcan" class="card">
 					<h2 id="gcan" class="eyebrow ruled">Can change after sharing</h2>
@@ -274,14 +290,30 @@ templ NewInvite(p NewInvitePage) {
 					<a class="btn btn-plain" style="height: 48px" href="/admin/invites">Cancel</a>
 				</div>
 			</div>
-			<aside aria-label="Guest preview" class="col-1 card dashed">
-				<span class="eyebrow">Guest will see</span>
-				<span style="font-size: 18px; font-weight: 700">{ p.PreviewTitle }</span>
-				<span class="ink-2" style="font-size: 14px">{ p.PreviewSummary }</span>
-				<span class="mono ink-2" style="font-size: 14px">{ p.PreviewSlots }</span>
-				<span class="small muted" style="line-height: 1.5">Not shown: the Label, your calendar details, uses left.</span>
+			<aside aria-label="Guest preview" aria-live="polite" class="col-1 card dashed" id="invite-preview">
+				@InvitePreviewBox(p.Preview)
 			</aside>
 		</form>
+		<script>
+			(function () {
+				var form = document.getElementById("new-invite");
+				var box = document.getElementById("invite-preview");
+				var timer, seq = 0;
+				function update() {
+					clearTimeout(timer);
+					timer = setTimeout(function () {
+						var mine = ++seq;
+						var q = new URLSearchParams(new FormData(form));
+						fetch("/admin/invites/preview?" + q, { credentials: "same-origin" })
+							.then(function (r) { return r.ok ? r.text() : null; })
+							.then(function (html) { if (html !== null && mine === seq) box.innerHTML = html; })
+							.catch(function () {});
+					}, 250);
+				}
+				form.addEventListener("input", update);
+				form.addEventListener("change", update);
+			})();
+		</script>
 	}
 }
 

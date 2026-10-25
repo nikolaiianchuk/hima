@@ -757,3 +757,29 @@ func TestPasswordLoginWithTOTP(t *testing.T) {
 		t.Errorf("replayed code: %d", status)
 	}
 }
+
+func TestInvitePreviewFollowsForm(t *testing.T) {
+	ts := newTestServer(t, config.Auth{Mode: config.AuthModeProxy})
+	_, body, _ := ts.get(t, "/admin/invites/new")
+	mustContain(t, body, `id="invite-preview"`, "30 min · Video call · next 14 days", "/admin/invites/preview?")
+
+	q := url.Values{"durations": {"60", "90"}, "location_kind": {"place"}, "location": {"VRChat"},
+		"range_start": {"2026-10-26"}, "range_end": {"2026-10-27"}, "show_busy": {"1"}}
+	status, body, _ := ts.get(t, "/admin/invites/preview?"+q.Encode())
+	if status != http.StatusOK {
+		t.Fatalf("status %d", status)
+	}
+	// Mon and Tue, 10:00–12:00, hourly meetings every 30 min: 3 a day.
+	mustContain(t, body, "60 or 90 min · VRChat · 26 Oct – 27 Oct · busy times shown", "6 open Slots for 60 min")
+	if strings.Contains(body, "<html") {
+		t.Error("preview should be a fragment")
+	}
+
+	_, body, _ = ts.get(t, "/admin/invites/preview?location_kind=phone")
+	mustContain(t, body, "Pick a duration · Phone call")
+	if strings.Contains(body, "open Slots") {
+		t.Error("slot count without a duration")
+	}
+	_, body, _ = ts.get(t, "/admin/invites/preview?durations=30&range_start=2026-10-28&range_end=2026-10-26")
+	mustContain(t, body, "The dates end before they start")
+}
